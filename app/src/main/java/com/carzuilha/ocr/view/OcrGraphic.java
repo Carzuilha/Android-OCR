@@ -1,11 +1,12 @@
-package com.carzuilha.ocr.api;
+package com.carzuilha.ocr.view;
 
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.RectF;
 
-import com.carzuilha.ocr.view.GraphicView;
+import com.google.android.gms.vision.CameraSource;
 import com.google.android.gms.vision.text.Text;
 import com.google.android.gms.vision.text.TextBlock;
 
@@ -15,7 +16,7 @@ import java.util.List;
  *  Graphic instance for rendering TextBlock position, size, and ID within an associated graphic
  * overlay view.
  */
-public class OcrGraphicView extends GraphicView.Graphic {
+public class OcrGraphic extends Graphic {
 
     //  Defines the color of the text drawn.
     private static final int TEXT_COLOR = Color.WHITE;
@@ -31,21 +32,26 @@ public class OcrGraphicView extends GraphicView.Graphic {
      * @param   _overlay    The graphic overlay.
      * @param   _text       The TextBlock used to draw the detected text.
      */
-    OcrGraphicView(GraphicView _overlay, TextBlock _text) {
+    public OcrGraphic(GraphicView _overlay, TextBlock _text) {
 
         super(_overlay);
 
         textBlock = _text;
 
         if (rectPaint == null) {
+
             rectPaint = new Paint();
+
             rectPaint.setColor(TEXT_COLOR);
             rectPaint.setStyle(Paint.Style.STROKE);
             rectPaint.setStrokeWidth(4.0f);
+            rectPaint.setPathEffect(new DashPathEffect(new float[] {5, 5}, 0));
         }
 
         if (textPaint == null) {
+
             textPaint = new Paint();
+
             textPaint.setColor(TEXT_COLOR);
             textPaint.setTextSize(54.0f);
         }
@@ -64,6 +70,7 @@ public class OcrGraphicView extends GraphicView.Graphic {
         if (textBlock == null) return;
 
         RectF rect = new RectF(textBlock.getBoundingBox());
+
         rect = translateRect(rect);
         _canvas.drawRect(rect, rectPaint);
 
@@ -95,6 +102,41 @@ public class OcrGraphicView extends GraphicView.Graphic {
         rect = translateRect(rect);
 
         return rect.contains(_x, _y);
+    }
+
+    /**
+     *  Adjusts a horizontal value of the supplied value from the preview scale to the view
+     * scale.
+     */
+    public float scaleX(float _horizontal) {
+        return _horizontal * mOverlay.getWidthScaleFactor();
+    }
+
+    /**
+     *  Adjusts a vertical value of the supplied value from the preview scale to the view scale.
+     */
+    public float scaleY(float _vertical) {
+        return _vertical * mOverlay.getHeightScaleFactor();
+    }
+
+    /**
+     *  Adjusts the x coordinate from the preview's coordinate system to the view coordinate
+     * system.
+     */
+    public float translateX(float _x) {
+        if (mOverlay.getFacing() == CameraSource.CAMERA_FACING_FRONT) {
+            return mOverlay.getWidth() - scaleX(_x);
+        } else {
+            return scaleX(_x);
+        }
+    }
+
+    /**
+     *  Adjusts the y coordinate from the preview's coordinate system to the view coordinate
+     * system.
+     */
+    public float translateY(float _y) {
+        return scaleY(_y);
     }
 
 }

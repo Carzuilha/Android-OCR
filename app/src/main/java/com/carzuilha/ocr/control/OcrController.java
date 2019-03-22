@@ -1,29 +1,25 @@
-package com.carzuilha.ocr.model;
+package com.carzuilha.ocr.control;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.ImageFormat;
-import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.hardware.Camera.CameraInfo;
-import android.os.Build;
-import android.os.SystemClock;
 import android.support.annotation.Nullable;
 import android.support.annotation.RequiresPermission;
 import android.support.annotation.StringDef;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
-import android.view.SurfaceView;
 import android.view.WindowManager;
 
+import com.carzuilha.ocr.model.SizePair;
+import com.carzuilha.ocr.thread.FrameRunnable;
 import com.google.android.gms.common.images.Size;
 import com.google.android.gms.vision.Detector;
-import com.google.android.gms.vision.Frame;
 
 import java.io.IOException;
-import java.lang.Thread.State;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.ByteBuffer;
@@ -33,28 +29,20 @@ import java.util.List;
 import java.util.Map;
 
 /**
- *  Manages the application in conjunction with an underlying Google's detector.  This receives
- * preview frames from the camera at a specified rate, sending those frames to the detector as fast
- * as it is able to process those frames.
- *
- * NOTE: this code requires Google Play Services 8.1 or higher, due to using indirect byte buffers
- * for storing images.
+ *  Manages the application in conjunction with an underlying Google's detector. This code requires
+ * Google Play Services 8.1 or higher, due to using indirect byte buffers for storing images.
  */
 @SuppressWarnings("deprecation")
-public class CameraSource {
+public class OcrController {
 
     //  Defines the tag of the class.
-    private static final String TAG = "CameraSource";
+    private static final String TAG = "OcrController";
 
     //  Defines the camera type.
     @SuppressLint("InlinedApi")
     public static final int CAMERA_FACING_BACK = CameraInfo.CAMERA_FACING_BACK;
     @SuppressLint("InlinedApi")
     public static final int CAMERA_FACING_FRONT = CameraInfo.CAMERA_FACING_FRONT;
-
-    //  The dummy surface texture must be assigned a chosen name. Since we never use an OpenGL
-    // context, we can choose any ID we want here.
-    private static final int DUMMY_TEXTURE_NAME = 100;
 
     //  If the absolute difference between a preview size aspect ratio and a picture size aspect
     // ratio is less than this tolerance, they are considered to be the same aspect ratio.
@@ -108,69 +96,20 @@ public class CameraSource {
     private Size previewSize;
     private Context context;
 
-    //  These instances need to be held onto to avoid GC of their underlying resources.  Even though
-    // these aren't used outside of the method that creates them, they still must have hard
-    // references maintained to them.
-    private SurfaceView dummySurfaceView;
-    private SurfaceTexture dummySurfaceTexture;
-
     //  Dedicated thread and associated runnable for calling into the detector with frames, as the
-    // frames become available from the com.project.util.
+    // frames become available from the camera.
     private Thread processingThread;
-    private FrameProcessingRunnable frameProcessor;
+    private FrameRunnable frameProcessor;
 
-    //  Map to convert between a byte array, received from the com.project.util, and its associated
-    // byte buffer.  We use byte buffers internally because this is a more efficient way to call into
+    //  Map to convert between a byte array, received from the camera, and its associated byte buffer.
+    // We use byte buffers internally because this is a more efficient way to call into
     // native code later (avoids a potential copy).
     private Map<byte[], ByteBuffer> bytesToByteBuffer = new HashMap<>();
 
     /**
      *  Only allow creation via the builder class.
      */
-    private CameraSource() { }
-
-    /**
-     *  Stops the application and releases its resources and underlying detector.
-     */
-    public void release() {
-        synchronized (cameraLock) {
-            stop();
-            frameProcessor.release();
-        }
-    }
-
-    /**
-     *  Opens the camera and starts sending preview frames to the underlying detector. The preview
-     * frames are not displayed.
-     *
-     * @throws  IOException     If the camera's preview texture or display could not be initialized.
-     */
-    @RequiresPermission(Manifest.permission.CAMERA)
-    public CameraSource start() throws IOException {
-
-        synchronized (cameraLock) {
-
-            if (camera != null) return this;
-
-            camera = createCamera();
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-                dummySurfaceTexture = new SurfaceTexture(DUMMY_TEXTURE_NAME);
-                camera.setPreviewTexture(dummySurfaceTexture);
-            } else {
-                dummySurfaceView = new SurfaceView(context);
-                camera.setPreviewDisplay(dummySurfaceView.getHolder());
-            }
-
-            camera.startPreview();
-
-            processingThread = new Thread(frameProcessor);
-            frameProcessor.setActive(true);
-            processingThread.start();
-        }
-
-        return this;
-    }
+    private OcrController() { }
 
     /**
      *  Opens the camera and starts sending preview frames to the underlying detector. The supplied
@@ -181,7 +120,7 @@ public class CameraSource {
      *                              display.
      */
     @RequiresPermission(Manifest.permission.CAMERA)
-    public CameraSource start(SurfaceHolder _surfaceHolder) throws IOException {
+    public OcrController start(SurfaceHolder _surfaceHolder) throws IOException {
 
         synchronized (cameraLock) {
 
@@ -229,15 +168,9 @@ public class CameraSource {
                 camera.setPreviewCallbackWithBuffer(null);
 
                 try {
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-                        camera.setPreviewTexture(null);
-                    } else {
-                        camera.setPreviewDisplay(null);
-                    }
-
+                    camera.setPreviewTexture(null);
                 } catch (Exception e) {
-                    Log.e(TAG, "Failed to clear com.project.util preview: " + e);
+                    Log.e(TAG, "Failed to clear camera preview: " + e);
                 }
 
                 camera.release();
@@ -247,93 +180,39 @@ public class CameraSource {
     }
 
     /**
-     *  Returns the preview size that is currently in use by the underlying application.
+     *  Stops the application and releases its resources and underlying detector.
      */
-    public Size getPreviewSize() {
-        return previewSize;
+    public void release() {
+        synchronized (cameraLock) {
+            stop();
+            frameProcessor.release();
+        }
     }
 
     /**
      *  Returns the selected camera; one of CAMERA_FACING_BACK or CAMERA_FACING_FRONT.
+     *
+     * @return      The type of the camera (CAMERA_FACING_BACK or CAMERA_FACING_FRONT).
      */
     public int getCameraFacing() {
         return mFacing;
     }
 
     /**
-     *  Performs the zoom operation on the camera.
+     *  Returns the current rotation of the device.
      *
-     * @param   _scale      The zoom scale.
-     * @return              The current zoom of the camera.
+     * @return      The rotation of the device.
      */
-    public int doZoom(float _scale) {
-
-        synchronized (cameraLock) {
-
-            if (camera == null) return 0;
-
-            int currentZoom = 0;
-            int maxZoom;
-            float newZoom;
-
-            Camera.Parameters parameters = camera.getParameters();
-
-            if (!parameters.isZoomSupported()) {
-                return currentZoom;
-            }
-
-            maxZoom = parameters.getMaxZoom();
-            currentZoom = parameters.getZoom() + 1;
-
-            if (_scale > 1) {
-                newZoom = currentZoom + _scale * (maxZoom / 10);
-            } else {
-                newZoom = currentZoom * _scale;
-            }
-            currentZoom = Math.round(newZoom) - 1;
-
-            if (currentZoom < 0) {
-                currentZoom = 0;
-            } else if (currentZoom > maxZoom) {
-                currentZoom = maxZoom;
-            }
-            parameters.setZoom(currentZoom);
-            camera.setParameters(parameters);
-
-            return currentZoom;
-        }
-    }
-
-    /**
-     *  Initiates taking a picture, which happens asynchronously. The camera source should have been
-     * activated previously with start() or start(SurfaceHolder). The camera preview is suspended
-     * while the picture is being taken, but will resume once picture taking is done.
-     *
-     * @param   _shutter    The callback for image capture moment, or null.
-     * @param   _jpeg       The callback for JPEG image data, or null.
-     */
-    public void takePicture(ShutterCallback _shutter, PictureCallback _jpeg) {
-
-        synchronized (cameraLock) {
-
-            if (camera != null) {
-
-                PictureStartCallback startCallback = new PictureStartCallback();
-                startCallback.mDelegate = _shutter;
-                PictureDoneCallback doneCallback = new PictureDoneCallback();
-                doneCallback.mDelegate = _jpeg;
-
-                camera.takePicture(startCallback, null, null, doneCallback);
-            }
-        }
+    public int getRotation() {
+        return rotation;
     }
 
     /**
      *  Gets the current focus mode setting.
      *
-     * @return              Current focus mode. This value is null if the camera is not yet created.
-     *                      Applications should call autoFocus(AutoFocusCallback) to start the focus
-     *                      if focus mode is FOCUS_MODE_AUTO or FOCUS_MODE_MACRO.
+     * @return      Current focus mode. This value is null if the camera is not yet created.
+     *              Applications should call autoFocus(AutoFocusCallback) to start the focus
+     *              if focus mode is FOCUS_MODE_AUTO or FOCUS_MODE_MACRO.
      */
     @Nullable
     @FocusMode
@@ -410,6 +289,108 @@ public class CameraSource {
     }
 
     /**
+     *  Returns the active camera.
+     *
+     * @return      The device's active camera.
+     */
+    public Camera getCamera() {
+        return camera;
+    }
+
+    /**
+     *  Returns the preview size that is currently in use by the underlying application.
+     */
+    public Size getPreviewSize() {
+        return previewSize;
+    }
+
+    /**
+     *  Returns the processing thread of the camera, which does the frame processing.
+     *
+     * @return      The processing thread.
+     */
+    public Thread getProcessingThread() {
+        return processingThread;
+    }
+
+    /**
+     *  Returns the buffer of the camera.
+     *
+     * @return      The camera buffer.
+     */
+    public Map<byte[], ByteBuffer> getBytesToByteBuffer() {
+        return bytesToByteBuffer;
+    }
+
+    /**
+     *  Performs the zoom operation on the camera.
+     *
+     * @param   _scale      The zoom scale.
+     * @return              The current zoom of the camera.
+     */
+    public int doZoom(float _scale) {
+
+        synchronized (cameraLock) {
+
+            if (camera == null) return 0;
+
+            int currentZoom = 0;
+            int maxZoom;
+            float newZoom;
+
+            Camera.Parameters parameters = camera.getParameters();
+
+            if (!parameters.isZoomSupported()) {
+                return currentZoom;
+            }
+
+            maxZoom = parameters.getMaxZoom();
+            currentZoom = parameters.getZoom() + 1;
+
+            if (_scale > 1) {
+                newZoom = currentZoom + _scale * (maxZoom / 10);
+            } else {
+                newZoom = currentZoom * _scale;
+            }
+            currentZoom = Math.round(newZoom) - 1;
+
+            if (currentZoom < 0) {
+                currentZoom = 0;
+            } else if (currentZoom > maxZoom) {
+                currentZoom = maxZoom;
+            }
+            parameters.setZoom(currentZoom);
+            camera.setParameters(parameters);
+
+            return currentZoom;
+        }
+    }
+
+    /**
+     *  Initiates taking a picture, which happens asynchronously. The camera source should have been
+     * activated previously with start() or start(SurfaceHolder). The camera preview is suspended
+     * while the picture is being taken, but will resume once picture taking is done.
+     *
+     * @param   _shutter    The callback for image capture moment, or null.
+     * @param   _jpeg       The callback for JPEG image data, or null.
+     */
+    public void takePicture(ShutterCallback _shutter, PictureCallback _jpeg) {
+
+        synchronized (cameraLock) {
+
+            if (camera != null) {
+
+                PictureStartCallback startCallback = new PictureStartCallback();
+                startCallback.mDelegate = _shutter;
+                PictureDoneCallback doneCallback = new PictureDoneCallback();
+                doneCallback.mDelegate = _jpeg;
+
+                camera.takePicture(startCallback, null, null, doneCallback);
+            }
+        }
+    }
+
+    /**
      *  Starts camera's auto-focus and registers a callback function to run when the camera is
      * focused.
      *
@@ -448,9 +429,8 @@ public class CameraSource {
         }
     }
 
-
     /**
-     *  Opens the com.project.util and applies the user settings.
+     *  Opens the camera and applies the user settings.
      *
      * @throws  RuntimeException        If the method fails.
      */
@@ -460,7 +440,7 @@ public class CameraSource {
         int requestedCameraId = getIdForRequestedCamera(mFacing);
 
         if (requestedCameraId == -1) {
-            throw new RuntimeException("Could not find requested com.project.util.");
+            throw new RuntimeException("Could not find requested camera.");
         }
 
         Camera camera = Camera.open(requestedCameraId);
@@ -498,7 +478,7 @@ public class CameraSource {
             if (parameters.getSupportedFocusModes().contains(focusMode)) {
                 parameters.setFocusMode(focusMode);
             } else {
-                Log.i(TAG, "Camera focus mode: " + focusMode + " is not supported on this device.");
+                Log.i(TAG, "The camera focus mode: " + focusMode + " is not supported on this device.");
             }
         }
 
@@ -509,7 +489,7 @@ public class CameraSource {
             if (parameters.getSupportedFlashModes().contains(flashMode)) {
                 parameters.setFlashMode(flashMode);
             } else {
-                Log.i(TAG, "Camera flash mode: " + flashMode + " is not supported on this device.");
+                Log.i(TAG, "The camera flash mode: " + flashMode + " is not supported on this device.");
             }
         }
 
@@ -530,7 +510,6 @@ public class CameraSource {
 
         return camera;
     }
-
 
     /**
      *  Gets the id for the camera specified by the direction it is facing. Returns -1 if no such
@@ -587,6 +566,9 @@ public class CameraSource {
     /**
      *  Generates a list of acceptable preview sizes. Preview sizes are not acceptable if there is
      * not a corresponding picture size of the same aspect ratio.
+     *
+     * @param   _camera     The camera to be analyzed.
+     * @return              A list of acceptable preview sizer for the camera.
      */
     private static List<SizePair> generateValidPreviewSizeList(Camera _camera) {
 
@@ -670,7 +652,7 @@ public class CameraSource {
 
     /**
      *  Calculates the correct rotation for the given camera id and sets the rotation in the
-     * parameters.  It also sets the com.project.util's display orientation and rotation.
+     * parameters.  It also sets the camera's display orientation and rotation.
      *
      * @param   _parameters     The camera parameters for which to set the rotation.
      * @param   _cameraId       The camera id to set rotation based on.
@@ -761,7 +743,7 @@ public class CameraSource {
         private final Detector<?> detector;
 
         //  Defines a new camera source.
-        private CameraSource cameraSource = new CameraSource();
+        private OcrController cameraSource = new OcrController();
 
         /**
          *  Creates an application source builder with the supplied context and detector. Camera
@@ -769,6 +751,7 @@ public class CameraSource {
          * source.
          */
         public Builder(Context _context, Detector<?> _detector) {
+
             if (_context == null) {
                 throw new IllegalArgumentException("No context supplied.");
             }
@@ -776,7 +759,7 @@ public class CameraSource {
                 throw new IllegalArgumentException("No detector supplied.");
             }
 
-            this.detector = _detector;
+            detector = _detector;
             cameraSource.context = _context;
         }
 
@@ -785,10 +768,13 @@ public class CameraSource {
          * not available, the best matching available value is selected (Default: 30).
          */
         public Builder setRequestedFps(float _fps) {
+
             if (_fps <= 0) {
                 throw new IllegalArgumentException("Invalid fps: " + _fps);
             }
+
             cameraSource.requestedFps = _fps;
+
             return this;
         }
 
@@ -796,7 +782,9 @@ public class CameraSource {
          *  Sets the focus mode of the camera.
          */
         public Builder setFocusMode(@FocusMode String _mode) {
+
             cameraSource.focusMode = _mode;
+
             return this;
         }
 
@@ -804,7 +792,9 @@ public class CameraSource {
          *  Sets the flash mode of the camera.
          */
         public Builder setFlashMode(@FlashMode String _mode) {
+
             cameraSource.flashMode = _mode;
+
             return this;
         }
 
@@ -813,15 +803,19 @@ public class CameraSource {
          * values are not available options, the best matching available options are selected.
          */
         public Builder setRequestedPreviewSize(int _width, int _height) {
+
             // Restrict the requested range to something within the realm of possibility.  The
             // choice of 1000000 is a bit arbitrary -- intended to be well beyond resolutions that
             // devices can support.  We bound this to avoid int overflow in the code later.
             final int MAX = 1000000;
+
             if ((_width <= 0) || (_width > MAX) || (_height <= 0) || (_height > MAX)) {
                 throw new IllegalArgumentException("Invalid preview size: " + _width + "x" + _height);
             }
+
             cameraSource.requestedPreviewWidth = _width;
             cameraSource.requestedPreviewHeight = _height;
+
             return this;
         }
 
@@ -830,50 +824,26 @@ public class CameraSource {
          * (Default: back facing).
          */
         public Builder setFacing(int _facing) {
+
             if ((_facing != CAMERA_FACING_BACK) && (_facing != CAMERA_FACING_FRONT)) {
                 throw new IllegalArgumentException("Invalid com.project.util: " + _facing);
             }
+
             cameraSource.mFacing = _facing;
+
             return this;
         }
 
         /**
          *  Creates an instance of the camera source.
          */
-        public CameraSource build() {
-            cameraSource.frameProcessor = cameraSource.new FrameProcessingRunnable(detector);
+        public OcrController build() {
+
+            cameraSource.frameProcessor = new FrameRunnable(detector, cameraSource);
+
             return cameraSource;
         }
 
-    }
-
-    /**
-     *  Stores a preview size and a corresponding same-aspect-ratio picture size.  To avoid distorted
-     * preview images on some devices, the picture size must be set to a size that is the same aspect
-     * ratio as the preview size or the preview may end up being distorted.  If the picture size is
-     * null, then there is no picture size with the same aspect ratio as the preview size.
-     */
-    private static class SizePair {
-
-        private Size mPreview;
-        private Size mPicture;
-
-        public SizePair(android.hardware.Camera.Size _previewSize, android.hardware.Camera.Size _pictureSize) {
-            mPreview = new Size(_previewSize.width, _previewSize.height);
-
-            if (_pictureSize != null) {
-                mPicture = new Size(_pictureSize.width, _pictureSize.height);
-            }
-        }
-
-        public Size previewSize() {
-            return mPreview;
-        }
-
-        @SuppressWarnings("unused")
-        public Size pictureSize() {
-            return mPicture;
-        }
     }
 
     /**
@@ -884,135 +854,6 @@ public class CameraSource {
         @Override
         public void onPreviewFrame(byte[] data, Camera camera) {
             frameProcessor.setNextFrame(data, camera);
-        }
-    }
-
-    /**
-     *  This runnable controls access to the underlying receiver, calling it to process frames when
-     * available from the camera. This is designed to run detection on frames as fast as possible
-     * (i.e., without unnecessary context switching or waiting on the next frame).
-     */
-    private class FrameProcessingRunnable implements Runnable {
-
-        private long mStartTimeMillis = SystemClock.elapsedRealtime();
-        private Detector<?> mDetector;
-
-        //  This lock guards all of the member variables below.
-        private boolean mActive = true;
-        private final Object mLock = new Object();
-
-        //  These pending variables hold the state associated with the new frame awaiting processing.
-        private int mPendingFrameId = 0;
-        private long mPendingTimeMillis;
-        private ByteBuffer mPendingFrameData;
-
-        FrameProcessingRunnable(Detector<?> detector) {
-            mDetector = detector;
-        }
-
-        /**
-         *  Releases the underlying receiver. This is only safe to do after the associated thread
-         * has completed, which is managed in frame source's release method above.
-         */
-        @SuppressLint("Assert")
-        void release() {
-            assert (processingThread.getState() == State.TERMINATED);
-            mDetector.release();
-            mDetector = null;
-        }
-
-        /**
-         *  Marks the runnable as active/not active. Signals any blocked threads to continue.
-         */
-        void setActive(boolean _active) {
-
-            synchronized (mLock) {
-                mActive = _active;
-                mLock.notifyAll();
-            }
-        }
-
-        /**
-         *  Sets the frame data received from the camera. This adds the previous unused frame buffer
-         * (if present) back to the application, and keeps a pending reference to the frame data for
-         * future use.
-         */
-        void setNextFrame(byte[] _data, Camera _camera) {
-
-            synchronized (mLock) {
-
-                if (mPendingFrameData != null) {
-                    _camera.addCallbackBuffer(mPendingFrameData.array());
-                    mPendingFrameData = null;
-                }
-
-                if (!bytesToByteBuffer.containsKey(_data)) {
-                    Log.d(TAG,
-                            "Skipping frame.  Could not find ByteBuffer associated with the image " +
-                                    "data from the com.project.util.");
-                    return;
-                }
-
-                //  Timestamp and frame ID are maintained here, which will give downstream code some
-                // idea of the timing of frames received and when frames were dropped along the way.
-                mPendingTimeMillis = SystemClock.elapsedRealtime() - mStartTimeMillis;
-                mPendingFrameId++;
-                mPendingFrameData = bytesToByteBuffer.get(_data);
-
-                //  Notify the processor thread if it is waiting on the next frame (see below).
-                mLock.notifyAll();
-            }
-        }
-
-        /**
-         *  As long as the processing thread is active, this executes detection on frames
-         * continuously. The next pending frame is either immediately available or hasn't been
-         * received yet. Once it is available, we transfer the frame info to local variables and
-         * run detection on that frame. It immediately loops back for the next frame without
-         * pausing.
-         */
-        @Override
-        public void run() {
-
-            Frame outputFrame;
-            ByteBuffer data;
-
-            while (true) {
-
-                synchronized (mLock) {
-
-                    while (mActive && (mPendingFrameData == null)) {
-
-                        try {
-                            mLock.wait();
-                        } catch (InterruptedException e) {
-                            Log.d(TAG, "Frame processing loop terminated.", e);
-                            return;
-                        }
-                    }
-
-                    if (!mActive) return;
-
-                    outputFrame = new Frame.Builder()
-                            .setImageData(mPendingFrameData, previewSize.getWidth(),
-                                    previewSize.getHeight(), ImageFormat.NV21)
-                            .setId(mPendingFrameId)
-                            .setTimestampMillis(mPendingTimeMillis)
-                            .setRotation(rotation)
-                            .build();
-
-                    data = mPendingFrameData;
-                    mPendingFrameData = null;
-                }
-
-                try {
-                    mDetector.receiveFrame(outputFrame);
-                } catch (Throwable t) {
-                    Log.e(TAG, "Exception thrown from receiver.", t);
-                } finally {
-                    camera.addCallbackBuffer(data.array());
-                }
-            }
         }
     }
 
@@ -1049,8 +890,8 @@ public class CameraSource {
 
             synchronized (cameraLock) {
 
-                if (CameraSource.this.camera != null) {
-                    CameraSource.this.camera.startPreview();
+                if (OcrController.this.camera != null) {
+                    OcrController.this.camera.startPreview();
                 }
             }
         }
@@ -1081,6 +922,7 @@ public class CameraSource {
          */
         void onShutter();
     }
+
 
     /**
      *  Callback interface used to supply image data from a photo capture.

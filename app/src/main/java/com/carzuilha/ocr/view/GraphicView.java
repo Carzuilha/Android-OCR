@@ -2,7 +2,6 @@ package com.carzuilha.ocr.view;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -15,7 +14,7 @@ import java.util.Set;
  *  A view which renders a series of custom graphics to be overlaid on top of an associated preview
  * (i.e., the com.project.util preview).
  */
-public class GraphicView<T extends GraphicView.Graphic> extends View {
+public class GraphicView<T extends Graphic> extends View {
 
     private int facing = CameraSource.CAMERA_FACING_BACK;
     private int previewWidth;
@@ -27,86 +26,10 @@ public class GraphicView<T extends GraphicView.Graphic> extends View {
     private final Object lock = new Object();
 
     /**
-     *  Base class for a custom graphics object to be rendered within the graphic overlay.  Subclass
-     * this and implement the draw(Canvas) method to define the graphics element.  Add instances to
-     * the overlay using add(Graphic).
+     *
+     * @param   _context
+     * @param   _attrs
      */
-    public static abstract class Graphic {
-
-        private GraphicView mOverlay;
-
-        public Graphic(GraphicView _overlay) {
-            mOverlay = _overlay;
-        }
-
-        /**
-         * Draw the graphic on the supplied canvas.
-         *
-         * @param   _canvas         The drawing canvas.
-         */
-        public abstract void draw(Canvas _canvas);
-
-        /**
-         *  Returns 'true' if the supplied coordinates are within this graphic.
-         */
-        public abstract boolean contains(float _x, float _y);
-
-        /**
-         *  Adjusts a horizontal value of the supplied value from the preview scale to the view
-         * scale.
-         */
-        public float scaleX(float _horizontal) {
-            return _horizontal * mOverlay.widthScaleFactor;
-        }
-
-        /**
-         *  Adjusts a vertical value of the supplied value from the preview scale to the view scale.
-         */
-        public float scaleY(float _vertical) {
-            return _vertical * mOverlay.heightScaleFactor;
-        }
-
-        /**
-         *  Adjusts the x coordinate from the preview's coordinate system to the view coordinate
-         * system.
-         */
-        public float translateX(float _x) {
-            if (mOverlay.facing == CameraSource.CAMERA_FACING_FRONT) {
-                return mOverlay.getWidth() - scaleX(_x);
-            } else {
-                return scaleX(_x);
-            }
-        }
-
-        /**
-         *  Adjusts the y coordinate from the preview's coordinate system to the view coordinate
-         * system.
-         */
-        public float translateY(float _y) {
-            return scaleY(_y);
-        }
-
-        /**
-         *  Returns a RectF in which the left and right parameters of the provided Rect are adjusted
-         * by translateX, and the top and bottom are adjusted by translateY.
-         */
-        public RectF translateRect(RectF _inputRect) {
-
-            RectF returnRect = new RectF();
-
-            returnRect.left = translateX(_inputRect.left);
-            returnRect.top = translateY(_inputRect.top);
-            returnRect.right = translateX(_inputRect.right);
-            returnRect.bottom = translateY(_inputRect.bottom);
-
-            return returnRect;
-        }
-
-        public void postInvalidate() {
-            mOverlay.postInvalidate();
-        }
-    }
-
     public GraphicView(Context _context, AttributeSet _attrs) {
         super(_context, _attrs);
     }
@@ -139,6 +62,18 @@ public class GraphicView<T extends GraphicView.Graphic> extends View {
             graphics.remove(_graphic);
         }
         postInvalidate();
+    }
+
+    public int getFacing() {
+        return facing;
+    }
+
+    public float getWidthScaleFactor() {
+        return widthScaleFactor;
+    }
+
+    public float getHeightScaleFactor() {
+        return heightScaleFactor;
     }
 
     /**

@@ -10,13 +10,17 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
 
-import com.carzuilha.ocr.model.CameraSource;
+import com.carzuilha.ocr.control.OcrController;
 import com.google.android.gms.common.images.Size;
 
 import java.io.IOException;
 
-public class CameraGroup extends ViewGroup {
+/**
+ *  Defines a ViewGroup that contains the GraphicView object.
+ */
+public class CameraViewGroup extends ViewGroup {
 
+    //  Defines the tag of the class.
     private static final String TAG = "CameraViewGroup";
 
     private boolean startRequested;
@@ -24,10 +28,16 @@ public class CameraGroup extends ViewGroup {
 
     private Context context;
     private SurfaceView surfaceView;
-    private CameraSource cameraSource;
+    private OcrController cameraSource;
     private GraphicView overlay;
 
-    public CameraGroup(Context _context, AttributeSet _attrs) {
+    /**
+     *  Initializes the CameraViewGroup detector and sets its parameters.
+     *
+     * @param   _context    The context to be utilized.
+     * @param   _attrs      A set of attributes to be used with the context.
+     */
+    public CameraViewGroup(Context _context, AttributeSet _attrs) {
 
         super(_context, _attrs);
 
@@ -40,8 +50,15 @@ public class CameraGroup extends ViewGroup {
         addView(surfaceView);
     }
 
+    /**
+     *  Called when the application starts.
+     *
+     * @param   _cameraSource       The camera source to be utilized as OCR reference.
+     * @throws  IOException         If there is any problem with the camera execution.
+     * @throws  SecurityException   If the access for the camera is blocked.
+     */
     @RequiresPermission(Manifest.permission.CAMERA)
-    public void start(CameraSource _cameraSource) throws IOException, SecurityException {
+    public void start(OcrController _cameraSource) throws IOException, SecurityException {
 
         if (_cameraSource == null) {
             stop();
@@ -55,13 +72,24 @@ public class CameraGroup extends ViewGroup {
         }
     }
 
+    /**
+     *  Called when the application starts.
+     *
+     * @param   _cameraSource       The camera source to be utilized as OCR reference.
+     * @param   _overlay            The overlay to be utilized for the camera.
+     * @throws  IOException         If there is any problem with the camera execution.
+     * @throws  SecurityException   If the access for the camera is blocked.
+     */
     @RequiresPermission(Manifest.permission.CAMERA)
-    public void start(CameraSource _cameraSource, GraphicView _overlay) throws IOException, SecurityException {
+    public void start(OcrController _cameraSource, GraphicView _overlay) throws IOException, SecurityException {
 
         overlay = _overlay;
         start(_cameraSource);
     }
 
+    /**
+     *  Called when the application is backgrounded, interrupting the camera.
+     */
     public void stop() {
 
         if (cameraSource != null) {
@@ -69,6 +97,9 @@ public class CameraGroup extends ViewGroup {
         }
     }
 
+    /**
+     *  Called when the application stops, disposing resources.
+     */
     public void release() {
 
         if (cameraSource != null) {
@@ -77,6 +108,12 @@ public class CameraGroup extends ViewGroup {
         }
     }
 
+    /**
+     *  Starts the component if all are ready.
+     *
+     * @throws  IOException         If there is any problem with the camera execution.
+     * @throws  SecurityException   If the access for the camera is blocked.
+     */
     @RequiresPermission(Manifest.permission.CAMERA)
     private void startIfReady() throws IOException, SecurityException {
 
@@ -103,32 +140,15 @@ public class CameraGroup extends ViewGroup {
         }
     }
 
-    private class SurfaceCallback implements SurfaceHolder.Callback {
-
-        @Override
-        public void surfaceCreated(SurfaceHolder _surface) {
-
-            surfaceAvailable = true;
-
-            try {
-                startIfReady();
-            } catch (SecurityException se) {
-                Log.e(TAG,"Do not have permission to start application.", se);
-            } catch (IOException e) {
-                Log.e(TAG, "Could not start application source.", e);
-            }
-        }
-
-        @Override
-        public void surfaceDestroyed(SurfaceHolder _surface) {
-            surfaceAvailable = false;
-        }
-
-        @Override
-        public void surfaceChanged(SurfaceHolder _holder, int _format, int _width, int _height) {
-        }
-    }
-
+    /**
+     *  Called when the component layout were build or changed.
+     *
+     * @param   _changed    If the layout has changed or not.
+     * @param   _left       The new left coordinate of the component.
+     * @param   _top        The new top coordinate of the component.
+     * @param   _right      The new right coordinate of the component.
+     * @param   _bottom     The new bottom coordinate of the component.
+     */
     @Override
     protected void onLayout(boolean _changed, int _left, int _top, int _right, int _bottom) {
 
@@ -163,10 +183,6 @@ public class CameraGroup extends ViewGroup {
         float widthRatio = (float) viewWidth / (float) previewWidth;
         float heightRatio = (float) viewHeight / (float) previewHeight;
 
-        //  To fill the view with the camera preview, while also preserving the correct aspect ratio,
-        // it is usually necessary to slightly oversize the child and to crop off portions along one
-        // of the dimensions. We scale up based on the dimension requiring the most correction, and
-        // compute a crop offset for the other dimension.
         if (widthRatio > heightRatio) {
 
             childWidth = viewWidth;
@@ -182,8 +198,6 @@ public class CameraGroup extends ViewGroup {
         }
 
         for (int i = 0; i < getChildCount(); ++i) {
-            //  One dimension will be cropped. We shift child over or up by this offset and adjust
-            // the size to maintain the proper aspect ratio.
             getChildAt(i).layout(
                     -1 * childXOffset, -1 * childYOffset,
                     childWidth - childXOffset, childHeight - childYOffset);
@@ -198,6 +212,11 @@ public class CameraGroup extends ViewGroup {
         }
     }
 
+    /**
+     *  Returns if the device is in portrait mode.
+     *
+     * @return      'true' if in portrait mode, 'false' otherwise.
+     */
     private boolean isPortraitMode() {
 
         int orientation = context.getResources().getConfiguration().orientation;
@@ -210,5 +229,52 @@ public class CameraGroup extends ViewGroup {
         }
 
         return false;
+    }
+
+    /**
+     *  Defines a custom callback for the component.
+     */
+    private class SurfaceCallback implements SurfaceHolder.Callback {
+
+        /**
+         *  Called when the surface is created.
+         *
+         * @param   _surface        The surface holder.
+         */
+        @Override
+        public void surfaceCreated(SurfaceHolder _surface) {
+
+            surfaceAvailable = true;
+
+            try {
+                startIfReady();
+            } catch (SecurityException se) {
+                Log.e(TAG,"Do not have permission to start application.", se);
+            } catch (IOException e) {
+                Log.e(TAG, "Could not start application source.", e);
+            }
+        }
+
+        /**
+         *  Called when the surface is destroyed.
+         *
+         * @param   _surface        The surface holder.
+         */
+        @Override
+        public void surfaceDestroyed(SurfaceHolder _surface) {
+            surfaceAvailable = false;
+        }
+
+        /**
+         *  Called when the surface is changed.
+         *
+         * @param   _holder         The surface holder.
+         * @param   _format         The new surface format.
+         * @param   _width          The new surface width.
+         * @param   _height         The new surface height.
+         */
+        @Override
+        public void surfaceChanged(SurfaceHolder _holder, int _format, int _width, int _height) {
+        }
     }
 }

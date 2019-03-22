@@ -2,13 +2,18 @@ package com.carzuilha.ocr.listener;
 
 import android.view.ScaleGestureDetector;
 
-import com.carzuilha.ocr.model.CameraSource;
+import com.carzuilha.ocr.control.OcrController;
 
 public class ScaleListener implements ScaleGestureDetector.OnScaleGestureListener  {
 
-    private CameraSource cameraSource;
+    private OcrController cameraSource;
 
-    public ScaleListener(CameraSource _cameraSource) {
+    /**
+     *  Initializes the ScaleListener detector and sets its parameters.
+     *
+     * @param   _cameraSource   The camera source.
+     */
+    public ScaleListener(OcrController _cameraSource) {
         cameraSource = _cameraSource;
     }
 

@@ -21,12 +21,12 @@ import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.widget.Toast;
 
-import com.carzuilha.ocr.api.OcrDetector;
-import com.carzuilha.ocr.api.OcrGraphicView;
+import com.carzuilha.ocr.view.OcrTextBlock;
+import com.carzuilha.ocr.control.OcrController;
+import com.carzuilha.ocr.view.OcrGraphic;
 import com.carzuilha.ocr.listener.ScaleListener;
 import com.carzuilha.ocr.R;
-import com.carzuilha.ocr.model.CameraSource;
-import com.carzuilha.ocr.view.CameraGroup;
+import com.carzuilha.ocr.view.CameraViewGroup;
 import com.carzuilha.ocr.view.GraphicView;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
@@ -40,36 +40,35 @@ import java.io.IOException;
  */
 public final class MainActivity extends AppCompatActivity {
 
-    // Intent request code to handle updating play services if needed.
+    //  Intent request code to handle updating play services if needed.
     private static final int RC_HANDLE_GMS = 9001;
 
-    // Permission request codes need to be < 256.
+    //  Permission request codes need to be < 256.
     private static final int RC_HANDLE_CAMERA_PERM = 2;
 
-    // Component elements and events.
-    private CameraSource cameraSource;
-    private CameraGroup cameraSourcePreview;
-    private GraphicView<OcrGraphicView> graphicOverlay;
-    private ScaleGestureDetector scaleGestureDetector;
+    //  Component elements.
+    private OcrController cameraSource;
+    private CameraViewGroup cameraViewGroup;
+    private GraphicView<OcrGraphic> graphicOverlay;
 
-    //region Initializing activity
+    //  Component events.
+    private ScaleGestureDetector scaleGestureDetector;
 
     /**
      *  Initializes the UI and creates the detector pipeline.
+     *
+     * @param   bundle      The application bundle.
      */
     @Override
     public void onCreate(Bundle bundle) {
 
         super.onCreate(bundle);
 
-        setContentView(R.layout.main_activity);
+        setContentView(R.layout.activity_main);
 
         initializeViews();
         initializeCamera();
-
-        scaleGestureDetector = new ScaleGestureDetector(this, new ScaleListener(cameraSource));
-
-        Snackbar.make(graphicOverlay, "Pinch/Stretch to zoom.", Snackbar.LENGTH_LONG).show();
+        initializeListeners();
     }
 
     /**
@@ -78,8 +77,8 @@ public final class MainActivity extends AppCompatActivity {
      */
     private void initializeViews() {
 
-        graphicOverlay = findViewById(R.id.graphicOverlay);
-        cameraSourcePreview = findViewById(R.id.cameraSourcePreview);
+        graphicOverlay = findViewById(R.id.grv_overlay);
+        cameraViewGroup = findViewById(R.id.cvg_camera);
     }
 
     /**
@@ -97,9 +96,15 @@ public final class MainActivity extends AppCompatActivity {
         }
     }
 
-    //endregion
+    /**
+     *  Initializes events listeners and detectors.
+     *
+     */
+    private void initializeListeners() {
 
-    //region Overriding methods
+        scaleGestureDetector = new ScaleGestureDetector(this, new ScaleListener(cameraSource));
+        Snackbar.make(graphicOverlay, R.string.pinch_stretch_zoom, Snackbar.LENGTH_LONG).show();
+    }
 
     /**
      *  Restarts the application.
@@ -122,8 +127,8 @@ public final class MainActivity extends AppCompatActivity {
 
         super.onPause();
 
-        if (cameraSourcePreview != null) {
-            cameraSourcePreview.stop();
+        if (cameraViewGroup != null) {
+            cameraViewGroup.stop();
         }
     }
 
@@ -137,8 +142,8 @@ public final class MainActivity extends AppCompatActivity {
 
         super.onDestroy();
 
-        if (cameraSourcePreview != null) {
-            cameraSourcePreview.release();
+        if (cameraViewGroup != null) {
+            cameraViewGroup.release();
         }
     }
 
@@ -184,16 +189,12 @@ public final class MainActivity extends AppCompatActivity {
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
 
-        builder.setTitle("Optical Character Recognition");
+        builder.setTitle(R.string.app_name);
         builder.setMessage(R.string.no_camera_permission);
         builder.setPositiveButton(R.string.ok, listener);
 
         builder.show();
     }
-
-    //endregion
-
-    //region Internal methods
 
     /**
      *  Requests the camera permission.
@@ -207,7 +208,6 @@ public final class MainActivity extends AppCompatActivity {
         if (!ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {
 
             ActivityCompat.requestPermissions(this, permissions, RC_HANDLE_CAMERA_PERM);
-
             return;
         }
 
@@ -236,7 +236,7 @@ public final class MainActivity extends AppCompatActivity {
         Context context = getApplicationContext();
         TextRecognizer textRecognizer = new TextRecognizer.Builder(context).build();
 
-        textRecognizer.setProcessor(new OcrDetector(graphicOverlay));
+        textRecognizer.setProcessor(new OcrTextBlock(graphicOverlay));
 
         if (!textRecognizer.isOperational()) {
 
@@ -249,26 +249,28 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         cameraSource =
-                new CameraSource.Builder(getApplicationContext(), textRecognizer)
-                        .setFacing(CameraSource.CAMERA_FACING_BACK)
+                new OcrController.Builder(getApplicationContext(), textRecognizer)
+                        .setFacing(OcrController.CAMERA_FACING_BACK)
+                        .setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO)
                         .setRequestedPreviewSize(1280, 1024)
-                        .setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE)
                         .setRequestedFps(2.0f)
                         .setFlashMode(null)
                         .build();
     }
 
     /**
-     *  Starts or restarts the application source, if it exists. If the application source doesn't
+     *  Starts or restarts the camera source, if it exists. If the application source doesn't
      * exist yet (e.g., because onResume was called before the application source was created), this
      * will be called again when the application source is created.
      *
+     * @throws  SecurityException       if the camera access is denied.
      */
     private void startCameraSource() throws SecurityException {
 
         int code = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getApplicationContext());
 
         if (code != ConnectionResult.SUCCESS) {
+
             Dialog dlg = GoogleApiAvailability.getInstance().getErrorDialog(this, code, RC_HANDLE_GMS);
             dlg.show();
         }
@@ -277,7 +279,7 @@ public final class MainActivity extends AppCompatActivity {
 
             try {
 
-                cameraSourcePreview.start(cameraSource, graphicOverlay);
+                cameraViewGroup.start(cameraSource, graphicOverlay);
 
             } catch (IOException e) {
 
@@ -286,7 +288,5 @@ public final class MainActivity extends AppCompatActivity {
             }
         }
     }
-
-    //endregion
 
 }
