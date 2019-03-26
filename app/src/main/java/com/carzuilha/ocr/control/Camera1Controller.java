@@ -72,17 +72,17 @@ public class Camera1Controller {
     @Retention(RetentionPolicy.SOURCE)
     private @interface FlashMode {}
 
+    //  These values may be requested by the caller.  Due to hardware limitations, we may need to
+    // select close, but not exactly the same values for these.
+    private int maxPreviewWidth = 1024;
+    private int maxPreviewHeight = 768;
+    private float requestedFPS = 30.0f;
+
     //  Defines the default camera.
-    private int mFacing = CAMERA_FACING_BACK;
+    private int facing = CAMERA_FACING_BACK;
 
     //  Rotation of the device, and thus the associated preview images captured from the device.
     private int rotation;
-
-    //  These values may be requested by the caller.  Due to hardware limitations, we may need to
-    // select close, but not exactly the same values for these.
-    private int requestedPreviewWidth = 1024;
-    private int requestedPreviewHeight = 768;
-    private float requestedFps = 30.0f;
 
     //  Contains the focus and the flash values.
     private String focusMode = null;
@@ -106,10 +106,152 @@ public class Camera1Controller {
     // native code later (avoids a potential copy).
     private Map<byte[], ByteBuffer> bytesToByteBuffer = new HashMap<>();
 
+    //==============================================================================================
+    //                                  Default methods
+    //==============================================================================================
+
     /**
      *  Only allow creation via the builder class.
      */
     private Camera1Controller() { }
+
+    /**
+     *  Returns the selected camera; one of CAMERA_FACING_BACK or CAMERA_FACING_FRONT.
+     *
+     * @return      The type of the camera (CAMERA_FACING_BACK or CAMERA_FACING_FRONT).
+     */
+    public int getFacing() {
+        return facing;
+    }
+
+    /**
+     *  Returns the current rotation of the device.
+     *
+     * @return      The rotation of the device.
+     */
+    public int getRotation() {
+        return rotation;
+    }
+
+    /**
+     *  Gets the current focus mode setting.
+     *
+     * @return      Current focus mode. This value is null if the camera is not yet created.
+     *              Applications should call autoFocus(AutoFocusCallback) to start the focus
+     *              if focus mode is FOCUS_MODE_AUTO or FOCUS_MODE_MACRO.
+     */
+    @Nullable
+    @FocusMode
+    public String getFocusMode() {
+        return focusMode;
+    }
+
+    /**
+     * Gets the current flash mode setting.
+     *
+     * @return              Current flash mode. Null if flash mode setting is not
+     *                      supported or the camera is not yet created.
+     */
+    @Nullable
+    @FlashMode
+    public String getFlashMode() {
+        return flashMode;
+    }
+
+    /**
+     *  Returns the active camera.
+     *
+     * @return      The device's active camera.
+     */
+    public Camera getCamera() {
+        return camera;
+    }
+
+    /**
+     *  Returns the preview size that is currently in use by the underlying application.
+     */
+    public Size getPreviewSize() {
+        return previewSize;
+    }
+
+    /**
+     *  Returns the processing thread of the camera, which does the frame processing.
+     *
+     * @return      The processing thread.
+     */
+    public Thread getProcessingThread() {
+        return processingThread;
+    }
+
+    /**
+     *  Returns the buffer of the camera.
+     *
+     * @return      The camera buffer.
+     */
+    public Map<byte[], ByteBuffer> getBytesToByteBuffer() {
+        return bytesToByteBuffer;
+    }
+
+
+    /**
+     *  Sets the focus mode.
+     *
+     * @param   _mode       The focus mode.
+     * @return              'true' if the focus mode is set, 'false' otherwise.
+     */
+    public boolean setFocusMode(@FocusMode String _mode) {
+
+        synchronized (cameraLock) {
+
+            if (camera != null && _mode != null) {
+
+                Camera.Parameters parameters = camera.getParameters();
+
+                if (parameters.getSupportedFocusModes().contains(_mode)) {
+
+                    parameters.setFocusMode(_mode);
+                    camera.setParameters(parameters);
+                    focusMode = _mode;
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /**
+     *  Sets the flash mode.
+     *
+     * @param   _mode       Flash mode.
+     * @return              'true' if the flash mode is set, 'false' otherwise.
+     */
+    public boolean setFlashMode(@FlashMode String _mode) {
+
+        synchronized (cameraLock) {
+
+            if (camera != null && _mode != null) {
+
+                Camera.Parameters parameters = camera.getParameters();
+
+                if (parameters.getSupportedFlashModes().contains(_mode)) {
+
+                    parameters.setFlashMode(_mode);
+                    camera.setParameters(parameters);
+                    flashMode = _mode;
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    //==============================================================================================
+    //                                  Execution methods
+    //==============================================================================================
 
     /**
      *  Opens the camera and starts sending preview frames to the underlying detector. The supplied
@@ -187,139 +329,6 @@ public class Camera1Controller {
             stop();
             frameProcessor.release();
         }
-    }
-
-    /**
-     *  Returns the selected camera; one of CAMERA_FACING_BACK or CAMERA_FACING_FRONT.
-     *
-     * @return      The type of the camera (CAMERA_FACING_BACK or CAMERA_FACING_FRONT).
-     */
-    public int getCameraFacing() {
-        return mFacing;
-    }
-
-    /**
-     *  Returns the current rotation of the device.
-     *
-     * @return      The rotation of the device.
-     */
-    public int getRotation() {
-        return rotation;
-    }
-
-    /**
-     *  Gets the current focus mode setting.
-     *
-     * @return      Current focus mode. This value is null if the camera is not yet created.
-     *              Applications should call autoFocus(AutoFocusCallback) to start the focus
-     *              if focus mode is FOCUS_MODE_AUTO or FOCUS_MODE_MACRO.
-     */
-    @Nullable
-    @FocusMode
-    public String getFocusMode() {
-        return focusMode;
-    }
-
-    /**
-     *  Sets the focus mode.
-     *
-     * @param   _mode       The focus mode.
-     * @return              'true' if the focus mode is set, 'false' otherwise.
-     */
-    public boolean setFocusMode(@FocusMode String _mode) {
-
-        synchronized (cameraLock) {
-
-            if (camera != null && _mode != null) {
-
-                Camera.Parameters parameters = camera.getParameters();
-
-                if (parameters.getSupportedFocusModes().contains(_mode)) {
-
-                    parameters.setFocusMode(_mode);
-                    camera.setParameters(parameters);
-                    focusMode = _mode;
-
-                    return true;
-                }
-            }
-
-            return false;
-        }
-    }
-
-    /**
-     * Gets the current flash mode setting.
-     *
-     * @return              Current flash mode. Null if flash mode setting is not
-     *                      supported or the camera is not yet created.
-     */
-    @Nullable
-    @FlashMode
-    public String getFlashMode() {
-        return flashMode;
-    }
-
-    /**
-     *  Sets the flash mode.
-     *
-     * @param   _mode       Flash mode.
-     * @return              'true' if the flash mode is set, 'false' otherwise.
-     */
-    public boolean setFlashMode(@FlashMode String _mode) {
-
-        synchronized (cameraLock) {
-
-            if (camera != null && _mode != null) {
-
-                Camera.Parameters parameters = camera.getParameters();
-
-                if (parameters.getSupportedFlashModes().contains(_mode)) {
-
-                    parameters.setFlashMode(_mode);
-                    camera.setParameters(parameters);
-                    flashMode = _mode;
-
-                    return true;
-                }
-            }
-
-            return false;
-        }
-    }
-
-    /**
-     *  Returns the active camera.
-     *
-     * @return      The device's active camera.
-     */
-    public Camera getCamera() {
-        return camera;
-    }
-
-    /**
-     *  Returns the preview size that is currently in use by the underlying application.
-     */
-    public Size getPreviewSize() {
-        return previewSize;
-    }
-
-    /**
-     *  Returns the processing thread of the camera, which does the frame processing.
-     *
-     * @return      The processing thread.
-     */
-    public Thread getProcessingThread() {
-        return processingThread;
-    }
-
-    /**
-     *  Returns the buffer of the camera.
-     *
-     * @return      The camera buffer.
-     */
-    public Map<byte[], ByteBuffer> getBytesToByteBuffer() {
-        return bytesToByteBuffer;
     }
 
     /**
@@ -437,14 +446,14 @@ public class Camera1Controller {
     @SuppressLint("InlinedApi")
     private Camera createCamera() {
 
-        int requestedCameraId = getIdForRequestedCamera(mFacing);
+        int requestedCameraId = getIdForRequestedCamera(facing);
 
         if (requestedCameraId == -1) {
             throw new RuntimeException("Could not find requested camera.");
         }
 
         Camera camera = Camera.open(requestedCameraId);
-        SizePair sizePair = selectSizePair(camera, requestedPreviewWidth, requestedPreviewHeight);
+        SizePair sizePair = selectSizePair(camera, maxPreviewWidth, maxPreviewHeight);
 
         if (sizePair == null) {
             throw new RuntimeException("Could not find suitable preview size.");
@@ -453,7 +462,7 @@ public class Camera1Controller {
         Size pictureSize = sizePair.pictureSize();
         previewSize = sizePair.previewSize();
 
-        int[] previewFpsRange = selectPreviewFpsRange(camera, requestedFps);
+        int[] previewFpsRange = selectPreviewFpsRange(camera, requestedFPS);
 
         if (previewFpsRange == null) {
             throw new RuntimeException("Could not find suitable preview frames per second range.");
@@ -471,7 +480,7 @@ public class Camera1Controller {
                 previewFpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]);
         parameters.setPreviewFormat(ImageFormat.NV21);
 
-        setRotation(camera, parameters, requestedCameraId);
+        rotateCamera(camera, parameters, requestedCameraId);
 
         if (focusMode != null) {
 
@@ -531,6 +540,7 @@ public class Camera1Controller {
         }
         return -1;
     }
+
 
     /**
      *  Selects the most suitable preview and picture size, given the desired width and height.
@@ -657,7 +667,7 @@ public class Camera1Controller {
      * @param   _parameters     The camera parameters for which to set the rotation.
      * @param   _cameraId       The camera id to set rotation based on.
      */
-    private void setRotation(Camera _camera, Camera.Parameters _parameters, int _cameraId) {
+    private void rotateCamera(Camera _camera, Camera.Parameters _parameters, int _cameraId) {
 
         WindowManager windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
 
@@ -734,16 +744,20 @@ public class Camera1Controller {
         return byteArray;
     }
 
+    //==============================================================================================
+    //                                  Camera builder
+    //==============================================================================================
+
     /**
      *  Builder for configuring and creating an associated project source.
      */
     public static class Builder {
 
-        //  Defines the
+        //  Defines an OCR detector.
         private final Detector<?> detector;
 
         //  Defines a new camera source.
-        private Camera1Controller cameraSource = new Camera1Controller();
+        private Camera1Controller cameraController = new Camera1Controller();
 
         /**
          *  Creates an application source builder with the supplied context and detector. Camera
@@ -760,7 +774,7 @@ public class Camera1Controller {
             }
 
             detector = _detector;
-            cameraSource.context = _context;
+            cameraController.context = _context;
         }
 
         /**
@@ -773,7 +787,7 @@ public class Camera1Controller {
                 throw new IllegalArgumentException("Invalid fps: " + _fps);
             }
 
-            cameraSource.requestedFps = _fps;
+            cameraController.requestedFPS = _fps;
 
             return this;
         }
@@ -783,7 +797,7 @@ public class Camera1Controller {
          */
         public Builder setFocusMode(@FocusMode String _mode) {
 
-            cameraSource.focusMode = _mode;
+            cameraController.focusMode = _mode;
 
             return this;
         }
@@ -793,7 +807,7 @@ public class Camera1Controller {
          */
         public Builder setFlashMode(@FlashMode String _mode) {
 
-            cameraSource.flashMode = _mode;
+            cameraController.flashMode = _mode;
 
             return this;
         }
@@ -813,8 +827,8 @@ public class Camera1Controller {
                 throw new IllegalArgumentException("Invalid preview size: " + _width + "x" + _height);
             }
 
-            cameraSource.requestedPreviewWidth = _width;
-            cameraSource.requestedPreviewHeight = _height;
+            cameraController.maxPreviewWidth = _width;
+            cameraController.maxPreviewHeight = _height;
 
             return this;
         }
@@ -829,7 +843,7 @@ public class Camera1Controller {
                 throw new IllegalArgumentException("Invalid com.project.util: " + _facing);
             }
 
-            cameraSource.mFacing = _facing;
+            cameraController.facing = _facing;
 
             return this;
         }
@@ -839,12 +853,16 @@ public class Camera1Controller {
          */
         public Camera1Controller build() {
 
-            cameraSource.frameProcessor = new Camera1Runnable(detector, cameraSource);
+            cameraController.frameProcessor = new Camera1Runnable(detector, cameraController);
 
-            return cameraSource;
+            return cameraController;
         }
 
     }
+
+    //==============================================================================================
+    //                                      Callbacks
+    //==============================================================================================
 
     /**
      *  Called when the camera has a new preview frame.
@@ -913,6 +931,10 @@ public class Camera1Controller {
         }
     }
 
+    //==============================================================================================
+    //                                  Public interfaces
+    //==============================================================================================
+
     /**
      *  Callback interface used to signal the moment of actual image capture.
      */
@@ -922,7 +944,6 @@ public class Camera1Controller {
          */
         void onShutter();
     }
-
 
     /**
      *  Callback interface used to supply image data from a photo capture.

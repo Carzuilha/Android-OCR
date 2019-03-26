@@ -172,9 +172,9 @@ public class CameraViewGroup extends ViewGroup {
                     int max = Math.max(size.getWidth(), size.getHeight());
 
                     if (isPortraitMode()) {
-                        graphicView.setCameraInfo(min, max, camera1Controller.getCameraFacing());
+                        graphicView.setCameraInfo(min, max, camera1Controller.getFacing());
                     } else {
-                        graphicView.setCameraInfo(max, min, camera1Controller.getCameraFacing());
+                        graphicView.setCameraInfo(max, min, camera1Controller.getFacing());
                     }
 
                     graphicView.clear();
