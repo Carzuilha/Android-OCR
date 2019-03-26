@@ -4,7 +4,6 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.ImageFormat;
-import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.hardware.Camera.CameraInfo;
 import android.support.annotation.Nullable;
@@ -12,11 +11,11 @@ import android.support.annotation.RequiresPermission;
 import android.support.annotation.StringDef;
 import android.util.Log;
 import android.view.Surface;
-import android.view.SurfaceHolder;
 import android.view.WindowManager;
 
 import com.carzuilha.ocr.model.SizePair;
-import com.carzuilha.ocr.thread.FrameRunnable;
+import com.carzuilha.ocr.thread.Camera1Runnable;
+import com.carzuilha.ocr.view.DynamicTextureView;
 import com.google.android.gms.common.images.Size;
 import com.google.android.gms.vision.Detector;
 
@@ -34,10 +33,10 @@ import java.util.Map;
  * Google Play Services 8.1 or higher, due to using indirect byte buffers for storing images.
  */
 @SuppressWarnings("deprecation")
-public class OcrController {
+public class Camera1Controller {
 
     //  Defines the tag of the class.
-    private static final String TAG = "OcrController";
+    private static final String TAG = "Camera1Controller";
 
     //  Defines the camera type.
     @SuppressLint("InlinedApi")
@@ -100,7 +99,7 @@ public class OcrController {
     //  Dedicated thread and associated runnable for calling into the detector with frames, as the
     // frames become available from the camera.
     private Thread processingThread;
-    private FrameRunnable frameProcessor;
+    private Camera1Runnable frameProcessor;
 
     //  Map to convert between a byte array, received from the camera, and its associated byte buffer.
     // We use byte buffers internally because this is a more efficient way to call into
@@ -110,25 +109,25 @@ public class OcrController {
     /**
      *  Only allow creation via the builder class.
      */
-    private OcrController() { }
+    private Camera1Controller() { }
 
     /**
      *  Opens the camera and starts sending preview frames to the underlying detector. The supplied
      * surface holder is used for the preview so frames can be displayed to the user.
      *
-     * @param   _surfaceTexture     The surface holder to use for the preview frames
-     * @throws  IOException         If the supplied surface holder could not be used as the preview
-     *                              display.
+     * @param   _dynamicTextureView     The surface holder to use for the preview frames
+     * @throws  IOException             If the supplied surface holder could not be used as the preview
+     *                                  display.
      */
     @RequiresPermission(Manifest.permission.CAMERA)
-    public OcrController start(SurfaceTexture _surfaceTexture) throws IOException {
+    public Camera1Controller start(DynamicTextureView _dynamicTextureView) throws IOException {
 
         synchronized (cameraLock) {
 
             if (camera != null) return this;
 
             camera = createCamera();
-            camera.setPreviewTexture(_surfaceTexture);
+            camera.setPreviewTexture(_dynamicTextureView.getSurfaceTexture());
             camera.startPreview();
 
             processingThread = new Thread(frameProcessor);
@@ -744,7 +743,7 @@ public class OcrController {
         private final Detector<?> detector;
 
         //  Defines a new camera source.
-        private OcrController cameraSource = new OcrController();
+        private Camera1Controller cameraSource = new Camera1Controller();
 
         /**
          *  Creates an application source builder with the supplied context and detector. Camera
@@ -838,9 +837,9 @@ public class OcrController {
         /**
          *  Creates an instance of the camera source.
          */
-        public OcrController build() {
+        public Camera1Controller build() {
 
-            cameraSource.frameProcessor = new FrameRunnable(detector, cameraSource);
+            cameraSource.frameProcessor = new Camera1Runnable(detector, cameraSource);
 
             return cameraSource;
         }
@@ -891,8 +890,8 @@ public class OcrController {
 
             synchronized (cameraLock) {
 
-                if (OcrController.this.camera != null) {
-                    OcrController.this.camera.startPreview();
+                if (Camera1Controller.this.camera != null) {
+                    Camera1Controller.this.camera.startPreview();
                 }
             }
         }

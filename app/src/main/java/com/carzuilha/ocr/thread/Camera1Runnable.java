@@ -6,7 +6,7 @@ import android.hardware.Camera;
 import android.os.SystemClock;
 import android.util.Log;
 
-import com.carzuilha.ocr.control.OcrController;
+import com.carzuilha.ocr.control.Camera1Controller;
 import com.google.android.gms.vision.Detector;
 import com.google.android.gms.vision.Frame;
 
@@ -17,10 +17,10 @@ import java.nio.ByteBuffer;
  * available from the camera. This is designed to run detection on frames as fast as possible
  * (i.e., without unnecessary context switching or waiting on the next frame).
  */
-public class FrameRunnable implements Runnable {
+public class Camera1Runnable implements Runnable {
 
     //  Defines the tag of the class.
-    private static final String TAG = "FrameRunnable";
+    private static final String TAG = "Camera1Runnable";
 
     private long mStartTimeMillis = SystemClock.elapsedRealtime();
     private Detector<?> mDetector;
@@ -35,11 +35,11 @@ public class FrameRunnable implements Runnable {
     private ByteBuffer mPendingFrameData;
 
     //  The camera source, which the thread will run.
-    private OcrController cameraSource;
+    private Camera1Controller cameraController;
 
-    public FrameRunnable(Detector<?> detector, OcrController _cameraSource) {
+    public Camera1Runnable(Detector<?> detector, Camera1Controller _cameraSource) {
         mDetector = detector;
-        cameraSource = _cameraSource;
+        cameraController = _cameraSource;
     }
 
     /**
@@ -48,7 +48,7 @@ public class FrameRunnable implements Runnable {
      */
     @SuppressLint("Assert")
     public void release() {
-        assert (cameraSource.getProcessingThread().getState() == Thread.State.TERMINATED);
+        assert (cameraController.getProcessingThread().getState() == Thread.State.TERMINATED);
         mDetector.release();
         mDetector = null;
     }
@@ -78,7 +78,7 @@ public class FrameRunnable implements Runnable {
                 mPendingFrameData = null;
             }
 
-            if (!cameraSource.getBytesToByteBuffer().containsKey(_data)) {
+            if (!cameraController.getBytesToByteBuffer().containsKey(_data)) {
                 Log.d(TAG,
                         "Skipping frame. Could not find ByteBuffer associated with the image " +
                                 "data from the com.project.util.");
@@ -89,7 +89,7 @@ public class FrameRunnable implements Runnable {
             // idea of the timing of frames received and when frames were dropped along the way.
             mPendingTimeMillis = SystemClock.elapsedRealtime() - mStartTimeMillis;
             mPendingFrameId++;
-            mPendingFrameData = cameraSource.getBytesToByteBuffer().get(_data);
+            mPendingFrameData = cameraController.getBytesToByteBuffer().get(_data);
 
             //  Notify the processor thread if it is waiting on the next frame (see below).
             mLock.notifyAll();
@@ -128,11 +128,11 @@ public class FrameRunnable implements Runnable {
                 outputFrame = new Frame.Builder()
                         .setImageData(
                             mPendingFrameData,
-                                cameraSource.getPreviewSize().getWidth(),
-                                cameraSource.getPreviewSize().getHeight(), ImageFormat.NV21)
+                                cameraController.getPreviewSize().getWidth(),
+                                cameraController.getPreviewSize().getHeight(), ImageFormat.NV21)
                         .setId(mPendingFrameId)
                         .setTimestampMillis(mPendingTimeMillis)
-                        .setRotation(cameraSource.getRotation())
+                        .setRotation(cameraController.getRotation())
                         .build();
 
                 data = mPendingFrameData;
@@ -144,7 +144,7 @@ public class FrameRunnable implements Runnable {
             } catch (Throwable t) {
                 Log.e(TAG, "Exception thrown from receiver.", t);
             } finally {
-                cameraSource.getCamera().addCallbackBuffer(data.array());
+                cameraController.getCamera().addCallbackBuffer(data.array());
             }
         }
     }

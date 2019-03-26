@@ -17,14 +17,13 @@ import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.view.MotionEvent;
-import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.widget.Toast;
 
+import com.carzuilha.ocr.control.Camera2Controller;
+import com.carzuilha.ocr.control.Camera1Controller;
 import com.carzuilha.ocr.view.OcrTextBlock;
-import com.carzuilha.ocr.control.OcrController;
 import com.carzuilha.ocr.view.OcrGraphic;
-import com.carzuilha.ocr.listener.ScaleListener;
 import com.carzuilha.ocr.R;
 import com.carzuilha.ocr.view.CameraViewGroup;
 import com.carzuilha.ocr.view.GraphicView;
@@ -40,6 +39,8 @@ import java.io.IOException;
  */
 public final class MainActivity extends AppCompatActivity {
 
+    public static boolean USE_OLD_CAMERA = false;
+
     //  Intent request code to handle updating play services if needed.
     private static final int RC_HANDLE_GMS = 9001;
 
@@ -47,12 +48,10 @@ public final class MainActivity extends AppCompatActivity {
     private static final int RC_HANDLE_CAMERA_PERM = 2;
 
     //  Component elements.
-    private OcrController cameraSource;
+    private Camera1Controller camera1Controller = null;
+    private Camera2Controller camera2Controller = null;
     private CameraViewGroup cameraViewGroup;
     private GraphicView<OcrGraphic> graphicOverlay;
-
-    //  Component events.
-    private ScaleGestureDetector scaleGestureDetector;
 
     /**
      *  Initializes the UI and creates the detector pipeline.
@@ -68,7 +67,6 @@ public final class MainActivity extends AppCompatActivity {
 
         initializeViews();
         initializeCamera();
-        initializeListeners();
     }
 
     /**
@@ -94,16 +92,6 @@ public final class MainActivity extends AppCompatActivity {
         } else {
             requestCameraPermission();
         }
-    }
-
-    /**
-     *  Initializes events listeners and detectors.
-     *
-     */
-    private void initializeListeners() {
-
-        scaleGestureDetector = new ScaleGestureDetector(this, new ScaleListener(cameraSource));
-        Snackbar.make(graphicOverlay, R.string.pinch_stretch_zoom, Snackbar.LENGTH_LONG).show();
     }
 
     /**
@@ -155,7 +143,7 @@ public final class MainActivity extends AppCompatActivity {
      */
     @Override
     public boolean onTouchEvent(MotionEvent e) {
-        return scaleGestureDetector.onTouchEvent(e) || super.onTouchEvent(e);
+        return super.onTouchEvent(e);
     }
 
     /**
@@ -248,14 +236,24 @@ public final class MainActivity extends AppCompatActivity {
             }
         }
 
-        cameraSource =
-                new OcrController.Builder(getApplicationContext(), textRecognizer)
-                        .setFacing(OcrController.CAMERA_FACING_BACK)
-                        .setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO)
-                        .setRequestedPreviewSize(1280, 1024)
-                        .setRequestedFps(2.0f)
-                        .setFlashMode(null)
-                        .build();
+        if (USE_OLD_CAMERA) {
+            camera1Controller =
+                    new Camera1Controller.Builder(getApplicationContext(), textRecognizer)
+                            .setFacing(Camera1Controller.CAMERA_FACING_BACK)
+                            .setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO)
+                            .setRequestedPreviewSize(1280, 1024)
+                            .setRequestedFps(2.0f)
+                            .setFlashMode(null)
+                            .build();
+        }
+        else {
+            camera2Controller =
+                    new Camera2Controller.Builder(getApplicationContext(), textRecognizer)
+                            .setFacing(Camera2Controller.CAMERA_FACING_BACK)
+                            .setFocusMode(Camera2Controller.CAMERA_AF_AUTO)
+                            .build();
+        }
+
     }
 
     /**
@@ -275,18 +273,38 @@ public final class MainActivity extends AppCompatActivity {
             dlg.show();
         }
 
-        if (cameraSource != null) {
+        if (USE_OLD_CAMERA) {
 
-            try {
+            if (camera1Controller != null) {
 
-                cameraViewGroup.start(cameraSource, graphicOverlay);
+                try {
 
-            } catch (IOException e) {
+                    cameraViewGroup.start(camera1Controller, graphicOverlay);
 
-                cameraSource.release();
-                cameraSource = null;
+                } catch (IOException e) {
+
+                    camera1Controller.release();
+                    camera1Controller = null;
+                }
             }
         }
+        else {
+
+            if (camera2Controller != null) {
+
+                try {
+
+                    cameraViewGroup.start(camera2Controller, graphicOverlay);
+
+                } catch (IOException e) {
+
+                    camera2Controller.release();
+                    camera2Controller = null;
+                }
+            }
+        }
+
+
     }
 
 }

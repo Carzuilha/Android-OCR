@@ -7,11 +7,12 @@ import android.graphics.SurfaceTexture;
 import android.support.annotation.RequiresPermission;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.view.SurfaceHolder;
 import android.view.TextureView;
 import android.view.ViewGroup;
 
-import com.carzuilha.ocr.control.OcrController;
+import com.carzuilha.ocr.control.Camera1Controller;
+import com.carzuilha.ocr.control.Camera2Controller;
+import com.carzuilha.ocr.main.MainActivity;
 import com.google.android.gms.common.images.Size;
 
 import java.io.IOException;
@@ -28,9 +29,11 @@ public class CameraViewGroup extends ViewGroup {
     private boolean surfaceAvailable;
 
     private Context context;
-    private TextureView textureView;
-    private OcrController cameraSource;
-    private GraphicView overlay;
+    private DynamicTextureView dynamicTextureView;
+    private GraphicView graphicView;
+
+    private Camera1Controller camera1Controller = null;
+    private Camera2Controller camera2Controller = null;
 
     /**
      *  Initializes the CameraViewGroup detector and sets its parameters.
@@ -45,29 +48,29 @@ public class CameraViewGroup extends ViewGroup {
         context = _context;
         startRequested = false;
         surfaceAvailable = false;
-        textureView = new TextureView(_context);
-        textureView.setSurfaceTextureListener(new TextureListener());
+        dynamicTextureView = new DynamicTextureView(_context);
+        dynamicTextureView.setSurfaceTextureListener(new TextureListener());
 
-        addView(textureView);
+        addView(dynamicTextureView);
     }
 
     /**
      *  Called when the application starts.
      *
-     * @param   _cameraSource       The camera source to be utilized as OCR reference.
+     * @param   _camera1Controller   The camera source to be utilized as OCR reference.
      * @throws  IOException         If there is any problem with the camera execution.
      * @throws  SecurityException   If the access for the camera is blocked.
      */
     @RequiresPermission(Manifest.permission.CAMERA)
-    public void start(OcrController _cameraSource) throws IOException, SecurityException {
+    public void start(Camera1Controller _camera1Controller) throws IOException, SecurityException {
 
-        if (_cameraSource == null) {
+        if (_camera1Controller == null) {
             stop();
         }
 
-        cameraSource = _cameraSource;
+        camera1Controller = _camera1Controller;
 
-        if (cameraSource != null) {
+        if (camera1Controller != null) {
             startRequested = true;
             startIfReady();
         }
@@ -76,16 +79,54 @@ public class CameraViewGroup extends ViewGroup {
     /**
      *  Called when the application starts.
      *
-     * @param   _cameraSource       The camera source to be utilized as OCR reference.
-     * @param   _overlay            The overlay to be utilized for the camera.
+     * @param   _camera2Controller  The camera source to be utilized as OCR reference.
      * @throws  IOException         If there is any problem with the camera execution.
      * @throws  SecurityException   If the access for the camera is blocked.
      */
     @RequiresPermission(Manifest.permission.CAMERA)
-    public void start(OcrController _cameraSource, GraphicView _overlay) throws IOException, SecurityException {
+    public void start(Camera2Controller _camera2Controller) throws IOException, SecurityException {
 
-        overlay = _overlay;
-        start(_cameraSource);
+        if (_camera2Controller == null) {
+            stop();
+        }
+
+        camera2Controller = _camera2Controller;
+
+        if (camera2Controller != null) {
+            startRequested = true;
+            startIfReady();
+        }
+    }
+
+    /**
+     *  Called when the application starts.
+     *
+     * @param   _camera1Controller   The camera source to be utilized as OCR reference.
+     * @param   _overlay            The graphicView to be utilized for the camera.
+     * @throws  IOException         If there is any problem with the camera execution.
+     * @throws  SecurityException   If the access for the camera is blocked.
+     */
+    @RequiresPermission(Manifest.permission.CAMERA)
+    public void start(Camera1Controller _camera1Controller, GraphicView _overlay) throws IOException, SecurityException {
+
+        graphicView = _overlay;
+        start(_camera1Controller);
+    }
+
+
+    /**
+     *  Called when the application starts.
+     *
+     * @param   _camera2Controller  The camera source to be utilized as OCR reference.
+     * @param   _overlay            The graphicView to be utilized for the camera.
+     * @throws  IOException         If there is any problem with the camera execution.
+     * @throws  SecurityException   If the access for the camera is blocked.
+     */
+    @RequiresPermission(Manifest.permission.CAMERA)
+    public void start(Camera2Controller _camera2Controller, GraphicView _overlay) throws IOException, SecurityException {
+
+        graphicView = _overlay;
+        start(_camera2Controller);
     }
 
     /**
@@ -93,8 +134,8 @@ public class CameraViewGroup extends ViewGroup {
      */
     public void stop() {
 
-        if (cameraSource != null) {
-            cameraSource.stop();
+        if (camera1Controller != null) {
+            camera1Controller.stop();
         }
     }
 
@@ -103,9 +144,9 @@ public class CameraViewGroup extends ViewGroup {
      */
     public void release() {
 
-        if (cameraSource != null) {
-            cameraSource.release();
-            cameraSource = null;
+        if (camera1Controller != null) {
+            camera1Controller.release();
+            camera1Controller = null;
         }
     }
 
@@ -120,21 +161,45 @@ public class CameraViewGroup extends ViewGroup {
 
         if (startRequested && surfaceAvailable) {
 
-            cameraSource.start(textureView.getSurfaceTexture());
+            if (MainActivity.USE_OLD_CAMERA) {
 
-            if (overlay != null) {
+                camera1Controller.start(dynamicTextureView);
 
-                Size size = cameraSource.getPreviewSize();
-                int min = Math.min(size.getWidth(), size.getHeight());
-                int max = Math.max(size.getWidth(), size.getHeight());
+                if (graphicView != null) {
 
-                if (isPortraitMode()) {
-                    overlay.setCameraInfo(min, max, cameraSource.getCameraFacing());
-                } else {
-                    overlay.setCameraInfo(max, min, cameraSource.getCameraFacing());
+                    Size size = camera1Controller.getPreviewSize();
+                    int min = Math.min(size.getWidth(), size.getHeight());
+                    int max = Math.max(size.getWidth(), size.getHeight());
+
+                    if (isPortraitMode()) {
+                        graphicView.setCameraInfo(min, max, camera1Controller.getCameraFacing());
+                    } else {
+                        graphicView.setCameraInfo(max, min, camera1Controller.getCameraFacing());
+                    }
+
+                    graphicView.clear();
                 }
 
-                overlay.clear();
+            }
+            else {
+
+                camera2Controller.start(dynamicTextureView, context.getResources().getConfiguration().orientation);
+
+                if (graphicView != null) {
+
+                    Size size = camera2Controller.getPreviewSize();
+                    int min = Math.min(size.getWidth(), size.getHeight());
+                    int max = Math.max(size.getWidth(), size.getHeight());
+
+                    if (isPortraitMode()) {
+                        graphicView.setCameraInfo(min, max, camera2Controller.getCameraFacing());
+                    } else {
+                        graphicView.setCameraInfo(max, min, camera2Controller.getCameraFacing());
+                    }
+
+                    graphicView.clear();
+                }
+
             }
 
             startRequested = false;
@@ -156,9 +221,9 @@ public class CameraViewGroup extends ViewGroup {
         int previewWidth = 320;
         int previewHeight = 240;
 
-        if (cameraSource != null) {
+        if (camera1Controller != null) {
 
-            Size size = cameraSource.getPreviewSize();
+            Size size = camera1Controller.getPreviewSize();
 
             if (size != null) {
                 previewWidth = size.getWidth();
@@ -247,7 +312,7 @@ public class CameraViewGroup extends ViewGroup {
             } catch (SecurityException se) {
                 Log.e(TAG,"Do not have permission to start application.", se);
             } catch (IOException e) {
-                Log.e(TAG, "Could not start application source.", e);
+                Log.e(TAG,"Could not start application source.", e);
             }
         }
 
