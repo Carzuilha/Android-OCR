@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.ImageFormat;
+import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.hardware.Camera.CameraInfo;
 import android.support.annotation.Nullable;
@@ -115,19 +116,19 @@ public class OcrController {
      *  Opens the camera and starts sending preview frames to the underlying detector. The supplied
      * surface holder is used for the preview so frames can be displayed to the user.
      *
-     * @param   _surfaceHolder      The surface holder to use for the preview frames
+     * @param   _surfaceTexture     The surface holder to use for the preview frames
      * @throws  IOException         If the supplied surface holder could not be used as the preview
      *                              display.
      */
     @RequiresPermission(Manifest.permission.CAMERA)
-    public OcrController start(SurfaceHolder _surfaceHolder) throws IOException {
+    public OcrController start(SurfaceTexture _surfaceTexture) throws IOException {
 
         synchronized (cameraLock) {
 
             if (camera != null) return this;
 
             camera = createCamera();
-            camera.setPreviewDisplay(_surfaceHolder);
+            camera.setPreviewTexture(_surfaceTexture);
             camera.startPreview();
 
             processingThread = new Thread(frameProcessor);

@@ -3,11 +3,12 @@ package com.carzuilha.ocr.view;
 import android.Manifest;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.SurfaceTexture;
 import android.support.annotation.RequiresPermission;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.SurfaceHolder;
-import android.view.SurfaceView;
+import android.view.TextureView;
 import android.view.ViewGroup;
 
 import com.carzuilha.ocr.control.OcrController;
@@ -27,7 +28,7 @@ public class CameraViewGroup extends ViewGroup {
     private boolean surfaceAvailable;
 
     private Context context;
-    private SurfaceView surfaceView;
+    private TextureView textureView;
     private OcrController cameraSource;
     private GraphicView overlay;
 
@@ -44,10 +45,10 @@ public class CameraViewGroup extends ViewGroup {
         context = _context;
         startRequested = false;
         surfaceAvailable = false;
-        surfaceView = new SurfaceView(_context);
-        surfaceView.getHolder().addCallback(new SurfaceCallback());
+        textureView = new TextureView(_context);
+        textureView.setSurfaceTextureListener(new TextureListener());
 
-        addView(surfaceView);
+        addView(textureView);
     }
 
     /**
@@ -119,7 +120,7 @@ public class CameraViewGroup extends ViewGroup {
 
         if (startRequested && surfaceAvailable) {
 
-            cameraSource.start(surfaceView.getHolder());
+            cameraSource.start(textureView.getSurfaceTexture());
 
             if (overlay != null) {
 
@@ -234,15 +235,10 @@ public class CameraViewGroup extends ViewGroup {
     /**
      *  Defines a custom callback for the component.
      */
-    private class SurfaceCallback implements SurfaceHolder.Callback {
+    private class TextureListener implements TextureView.SurfaceTextureListener {
 
-        /**
-         *  Called when the surface is created.
-         *
-         * @param   _surface        The surface holder.
-         */
         @Override
-        public void surfaceCreated(SurfaceHolder _surface) {
+        public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
 
             surfaceAvailable = true;
 
@@ -255,26 +251,20 @@ public class CameraViewGroup extends ViewGroup {
             }
         }
 
-        /**
-         *  Called when the surface is destroyed.
-         *
-         * @param   _surface        The surface holder.
-         */
         @Override
-        public void surfaceDestroyed(SurfaceHolder _surface) {
-            surfaceAvailable = false;
+        public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) {
+
         }
 
-        /**
-         *  Called when the surface is changed.
-         *
-         * @param   _holder         The surface holder.
-         * @param   _format         The new surface format.
-         * @param   _width          The new surface width.
-         * @param   _height         The new surface height.
-         */
         @Override
-        public void surfaceChanged(SurfaceHolder _holder, int _format, int _width, int _height) {
+        public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+            surfaceAvailable = false;
+            return false;
+        }
+
+        @Override
+        public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
+
         }
     }
 }
