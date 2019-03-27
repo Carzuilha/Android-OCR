@@ -4,16 +4,16 @@ import android.graphics.Canvas;
 import android.graphics.RectF;
 
 /**
- *  Base class for a custom graphics object to be rendered within the graphic overlay.  Subclass
+ *  Base class for a custom graphics object to be rendered within the graphic graphicView.  Subclass
  * this and implement the draw(Canvas) method to define the graphics element.  Add instances to
- * the overlay using add(Graphic).
+ * the graphicView using add(Graphic).
  */
 public abstract class Graphic {
 
-    GraphicView mOverlay;
+    GraphicView graphicView;
 
-    Graphic(GraphicView _overlay) {
-        mOverlay = _overlay;
+    Graphic(GraphicView _graphicView) {
+        graphicView = _graphicView;
     }
 
     /**
@@ -72,7 +72,7 @@ public abstract class Graphic {
      *
      */
     public void postInvalidate() {
-        mOverlay.postInvalidate();
+        graphicView.postInvalidate();
     }
 
 }

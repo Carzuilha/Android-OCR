@@ -7,7 +7,7 @@ import com.google.android.gms.vision.Detector;
 import com.google.android.gms.vision.text.TextBlock;
 
 /**
- *  A very simple Processor which gets detected TextBlocks and adds them to the overlay as
+ *  A very simple Processor which gets detected TextBlocks and adds them to the graphicView as
  * OcrGraphics.
  */
 public class OcrTextBlock implements Detector.Processor<TextBlock> {

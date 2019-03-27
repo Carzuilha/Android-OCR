@@ -161,7 +161,7 @@ public class CameraViewGroup extends ViewGroup {
 
         if (startRequested && surfaceAvailable) {
 
-            if (MainActivity.USE_OLD_CAMERA) {
+            if (MainActivity.USE_LEGACY_CAMERA) {
 
                 camera1Controller.start(dynamicTextureView);
 
@@ -172,9 +172,9 @@ public class CameraViewGroup extends ViewGroup {
                     int max = Math.max(size.getWidth(), size.getHeight());
 
                     if (isPortraitMode()) {
-                        graphicView.setCameraInfo(min, max, camera1Controller.getFacing());
+                        graphicView.setCameraInfo(min, max, camera1Controller.getSelectedCamera());
                     } else {
-                        graphicView.setCameraInfo(max, min, camera1Controller.getFacing());
+                        graphicView.setCameraInfo(max, min, camera1Controller.getSelectedCamera());
                     }
 
                     graphicView.clear();
@@ -183,7 +183,7 @@ public class CameraViewGroup extends ViewGroup {
             }
             else {
 
-                camera2Controller.start(dynamicTextureView, context.getResources().getConfiguration().orientation);
+                camera2Controller.start(dynamicTextureView);
 
                 if (graphicView != null) {
 
@@ -192,9 +192,9 @@ public class CameraViewGroup extends ViewGroup {
                     int max = Math.max(size.getWidth(), size.getHeight());
 
                     if (isPortraitMode()) {
-                        graphicView.setCameraInfo(min, max, camera2Controller.getCameraFacing());
+                        graphicView.setCameraInfo(min, max, camera2Controller.getSelectedCamera());
                     } else {
-                        graphicView.setCameraInfo(max, min, camera2Controller.getCameraFacing());
+                        graphicView.setCameraInfo(max, min, camera2Controller.getSelectedCamera());
                     }
 
                     graphicView.clear();

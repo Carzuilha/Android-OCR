@@ -5,8 +5,6 @@ import android.graphics.Canvas;
 import android.util.AttributeSet;
 import android.view.View;
 
-import com.google.android.gms.vision.CameraSource;
-
 import java.util.HashSet;
 import java.util.Set;
 
@@ -16,7 +14,7 @@ import java.util.Set;
  */
 public class GraphicView<T extends Graphic> extends View {
 
-    private int facing = CameraSource.CAMERA_FACING_BACK;
+    private int cameraType = 0;
     private int previewWidth;
     private int previewHeight;
     private float widthScaleFactor = 1.0f;
@@ -34,18 +32,20 @@ public class GraphicView<T extends Graphic> extends View {
         super(_context, _attrs);
     }
 
-    /**
-     *  Removes all graphics from the overlay.
-     */
-    public void clear() {
-        synchronized (lock) {
-            graphics.clear();
-        }
-        postInvalidate();
+    public int getCameraType() {
+        return cameraType;
+    }
+
+    public float getWidthScaleFactor() {
+        return widthScaleFactor;
+    }
+
+    public float getHeightScaleFactor() {
+        return heightScaleFactor;
     }
 
     /**
-     *  Adds a graphic to the overlay.
+     *  Adds a graphic to the graphicView.
      */
     public void add(T _graphic) {
         synchronized (lock) {
@@ -55,7 +55,7 @@ public class GraphicView<T extends Graphic> extends View {
     }
 
     /**
-     *  Removes a graphic from the overlay.
+     *  Removes a graphic from the graphicView.
      */
     public void remove(T _graphic) {
         synchronized (lock) {
@@ -64,16 +64,14 @@ public class GraphicView<T extends Graphic> extends View {
         postInvalidate();
     }
 
-    public int getFacing() {
-        return facing;
-    }
-
-    public float getWidthScaleFactor() {
-        return widthScaleFactor;
-    }
-
-    public float getHeightScaleFactor() {
-        return heightScaleFactor;
+    /**
+     *  Removes all graphics from the graphicView.
+     */
+    public void clear() {
+        synchronized (lock) {
+            graphics.clear();
+        }
+        postInvalidate();
     }
 
     /**
@@ -101,7 +99,7 @@ public class GraphicView<T extends Graphic> extends View {
     }
 
     /**
-     *  Sets the camera attributes for size and facing direction, which informs how to transform
+     *  Sets the camera attributes for size and cameraType direction, which informs how to transform
      * image coordinates later.
      */
     public void setCameraInfo(int _previewWidth, int _previewHeight, int _facing) {
@@ -109,14 +107,14 @@ public class GraphicView<T extends Graphic> extends View {
         synchronized (lock) {
             this.previewWidth = _previewWidth;
             this.previewHeight = _previewHeight;
-            this.facing = _facing;
+            this.cameraType = _facing;
         }
 
         postInvalidate();
     }
 
     /**
-     *  Draws the overlay with its associated graphic objects.
+     *  Draws the graphicView with its associated graphic objects.
      */
     @Override
     protected void onDraw(Canvas canvas) {

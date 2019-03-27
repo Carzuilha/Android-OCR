@@ -17,29 +17,30 @@ import java.nio.ByteBuffer;
  * available from the camera. This is designed to run detection on frames as fast as possible
  * (i.e., without unnecessary context switching or waiting on the next frame).
  */
+@SuppressWarnings("deprecation")
 public class Camera1Runnable implements Runnable {
 
     //  Defines the tag of the class.
     private static final String TAG = "Camera1Runnable";
 
     private long mStartTimeMillis = SystemClock.elapsedRealtime();
-    private Detector<?> mDetector;
+    private Detector<?> detector;
 
     //  This lock guards all of the member variables below.
-    private boolean mActive = true;
-    private final Object mLock = new Object();
+    private boolean active = true;
+    private final Object lock = new Object();
 
     //  These pending variables hold the state associated with the new frame awaiting processing.
-    private int mPendingFrameId = 0;
-    private long mPendingTimeMillis;
-    private ByteBuffer mPendingFrameData;
+    private int pendingFrameId = 0;
+    private long pendingTimeMillis;
+    private ByteBuffer pendingFrameData;
 
     //  The camera source, which the thread will run.
-    private Camera1Controller cameraController;
+    private Camera1Controller camera1Controller;
 
-    public Camera1Runnable(Detector<?> detector, Camera1Controller _cameraSource) {
-        mDetector = detector;
-        cameraController = _cameraSource;
+    public Camera1Runnable(Detector<?> _detector, Camera1Controller _cameraController) {
+        detector = _detector;
+        camera1Controller = _cameraController;
     }
 
     /**
@@ -48,9 +49,11 @@ public class Camera1Runnable implements Runnable {
      */
     @SuppressLint("Assert")
     public void release() {
-        assert (cameraController.getProcessingThread().getState() == Thread.State.TERMINATED);
-        mDetector.release();
-        mDetector = null;
+
+        assert (camera1Controller.getProcessingThread().getState() == Thread.State.TERMINATED);
+
+        detector.release();
+        detector = null;
     }
 
     /**
@@ -58,9 +61,9 @@ public class Camera1Runnable implements Runnable {
      */
     public void setActive(boolean _active) {
 
-        synchronized (mLock) {
-            mActive = _active;
-            mLock.notifyAll();
+        synchronized (lock) {
+            active = _active;
+            lock.notifyAll();
         }
     }
 
@@ -71,14 +74,14 @@ public class Camera1Runnable implements Runnable {
      */
     public void setNextFrame(byte[] _data, Camera _camera) {
 
-        synchronized (mLock) {
+        synchronized (lock) {
 
-            if (mPendingFrameData != null) {
-                _camera.addCallbackBuffer(mPendingFrameData.array());
-                mPendingFrameData = null;
+            if (pendingFrameData != null) {
+                _camera.addCallbackBuffer(pendingFrameData.array());
+                pendingFrameData = null;
             }
 
-            if (!cameraController.getBytesToByteBuffer().containsKey(_data)) {
+            if (!camera1Controller.getBytesToByteBuffer().containsKey(_data)) {
                 Log.d(TAG,
                         "Skipping frame. Could not find ByteBuffer associated with the image " +
                                 "data from the com.project.util.");
@@ -87,12 +90,12 @@ public class Camera1Runnable implements Runnable {
 
             //  Timestamp and frame ID are maintained here, which will give downstream code some
             // idea of the timing of frames received and when frames were dropped along the way.
-            mPendingTimeMillis = SystemClock.elapsedRealtime() - mStartTimeMillis;
-            mPendingFrameId++;
-            mPendingFrameData = cameraController.getBytesToByteBuffer().get(_data);
+            pendingTimeMillis = SystemClock.elapsedRealtime() - mStartTimeMillis;
+            pendingFrameId++;
+            pendingFrameData = camera1Controller.getBytesToByteBuffer().get(_data);
 
             //  Notify the processor thread if it is waiting on the next frame (see below).
-            mLock.notifyAll();
+            lock.notifyAll();
         }
     }
 
@@ -111,40 +114,49 @@ public class Camera1Runnable implements Runnable {
 
         while (true) {
 
-            synchronized (mLock) {
+            synchronized (lock) {
 
-                while (mActive && (mPendingFrameData == null)) {
+                while (active && (pendingFrameData == null)) {
 
                     try {
-                        mLock.wait();
+                        // Wait for the next frame to be received from the camera, since we
+                        // don't have it yet.
+                        lock.wait();
                     } catch (InterruptedException e) {
                         Log.d(TAG, "Frame processing loop terminated.", e);
                         return;
                     }
                 }
 
-                if (!mActive) return;
+                if (!active) return;
 
                 outputFrame = new Frame.Builder()
                         .setImageData(
-                            mPendingFrameData,
-                                cameraController.getPreviewSize().getWidth(),
-                                cameraController.getPreviewSize().getHeight(), ImageFormat.NV21)
-                        .setId(mPendingFrameId)
-                        .setTimestampMillis(mPendingTimeMillis)
-                        .setRotation(cameraController.getRotation())
+                                pendingFrameData,
+                                camera1Controller.getPreviewSize().getWidth(),
+                                camera1Controller.getPreviewSize().getHeight(), ImageFormat.NV21)
+                        .setId(pendingFrameId)
+                        .setTimestampMillis(pendingTimeMillis)
+                        .setRotation(camera1Controller.getRotation())
                         .build();
 
-                data = mPendingFrameData;
-                mPendingFrameData = null;
+                data = pendingFrameData;
+
+                //  We need to clear pendingFrameData to ensure that this buffer isn't
+                // recycled back to the camera before we are done using that data.
+                pendingFrameData = null;
             }
 
+            // The code below needs to run outside of synchronization, because this will allow
+            // the camera to add pending frame(s) while we are running detection on the current
+            // frame.
+
             try {
-                mDetector.receiveFrame(outputFrame);
+                detector.receiveFrame(outputFrame);
             } catch (Throwable t) {
                 Log.e(TAG, "Exception thrown from receiver.", t);
             } finally {
-                cameraController.getCamera().addCallbackBuffer(data.array());
+                camera1Controller.getCamera().addCallbackBuffer(data.array());
             }
         }
     }

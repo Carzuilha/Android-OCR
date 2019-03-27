@@ -15,6 +15,7 @@ import android.view.WindowManager;
 
 import com.carzuilha.ocr.model.SizePair;
 import com.carzuilha.ocr.thread.Camera1Runnable;
+import com.carzuilha.ocr.util.ScreenManager;
 import com.carzuilha.ocr.view.DynamicTextureView;
 import com.google.android.gms.common.images.Size;
 import com.google.android.gms.vision.Detector;
@@ -40,9 +41,9 @@ public class Camera1Controller {
 
     //  Defines the camera type.
     @SuppressLint("InlinedApi")
-    public static final int CAMERA_FACING_BACK = CameraInfo.CAMERA_FACING_BACK;
+    public static final int CAMERA_FACING_BACK = 0;
     @SuppressLint("InlinedApi")
-    public static final int CAMERA_FACING_FRONT = CameraInfo.CAMERA_FACING_FRONT;
+    public static final int CAMERA_FACING_FRONT = 1;
 
     //  If the absolute difference between a preview size aspect ratio and a picture size aspect
     // ratio is less than this tolerance, they are considered to be the same aspect ratio.
@@ -79,7 +80,7 @@ public class Camera1Controller {
     private float requestedFPS = 30.0f;
 
     //  Defines the default camera.
-    private int facing = CAMERA_FACING_BACK;
+    private int selectedCamera = CAMERA_FACING_BACK;
 
     //  Rotation of the device, and thus the associated preview images captured from the device.
     private int rotation;
@@ -120,8 +121,8 @@ public class Camera1Controller {
      *
      * @return      The type of the camera (CAMERA_FACING_BACK or CAMERA_FACING_FRONT).
      */
-    public int getFacing() {
-        return facing;
+    public int getSelectedCamera() {
+        return selectedCamera;
     }
 
     /**
@@ -131,31 +132,6 @@ public class Camera1Controller {
      */
     public int getRotation() {
         return rotation;
-    }
-
-    /**
-     *  Gets the current focus mode setting.
-     *
-     * @return      Current focus mode. This value is null if the camera is not yet created.
-     *              Applications should call autoFocus(AutoFocusCallback) to start the focus
-     *              if focus mode is FOCUS_MODE_AUTO or FOCUS_MODE_MACRO.
-     */
-    @Nullable
-    @FocusMode
-    public String getFocusMode() {
-        return focusMode;
-    }
-
-    /**
-     * Gets the current flash mode setting.
-     *
-     * @return              Current flash mode. Null if flash mode setting is not
-     *                      supported or the camera is not yet created.
-     */
-    @Nullable
-    @FlashMode
-    public String getFlashMode() {
-        return flashMode;
     }
 
     /**
@@ -193,65 +169,91 @@ public class Camera1Controller {
     }
 
 
-    /**
-     *  Sets the focus mode.
-     *
-     * @param   _mode       The focus mode.
-     * @return              'true' if the focus mode is set, 'false' otherwise.
-     */
-    public boolean setFocusMode(@FocusMode String _mode) {
-
-        synchronized (cameraLock) {
-
-            if (camera != null && _mode != null) {
-
-                Camera.Parameters parameters = camera.getParameters();
-
-                if (parameters.getSupportedFocusModes().contains(_mode)) {
-
-                    parameters.setFocusMode(_mode);
-                    camera.setParameters(parameters);
-                    focusMode = _mode;
-
-                    return true;
-                }
-            }
-
-            return false;
-        }
-    }
+    //==============================================================================================
+    //                              Create/Start/Stop/Release
+    //==============================================================================================
 
     /**
-     *  Sets the flash mode.
+     *  Opens the camera and applies the user settings.
      *
-     * @param   _mode       Flash mode.
-     * @return              'true' if the flash mode is set, 'false' otherwise.
+     * @throws  RuntimeException        If the method fails.
      */
-    public boolean setFlashMode(@FlashMode String _mode) {
+    @SuppressLint("InlinedApi")
+    private Camera createCamera() {
 
-        synchronized (cameraLock) {
+        int requestedCameraId = getIdForRequestedCamera(selectedCamera);
 
-            if (camera != null && _mode != null) {
-
-                Camera.Parameters parameters = camera.getParameters();
-
-                if (parameters.getSupportedFlashModes().contains(_mode)) {
-
-                    parameters.setFlashMode(_mode);
-                    camera.setParameters(parameters);
-                    flashMode = _mode;
-
-                    return true;
-                }
-            }
-
-            return false;
+        if (requestedCameraId == -1) {
+            throw new RuntimeException("Could not find requested camera.");
         }
-    }
 
-    //==============================================================================================
-    //                                  Execution methods
-    //==============================================================================================
+        Camera camera = Camera.open(requestedCameraId);
+        SizePair sizePair = selectSizePair(camera, maxPreviewWidth, maxPreviewHeight);
+
+        if (sizePair == null) {
+            throw new RuntimeException("Could not find suitable preview size.");
+        }
+
+        Size pictureSize = sizePair.pictureSize();
+        previewSize = sizePair.previewSize();
+
+        int[] previewFpsRange = selectPreviewFpsRange(camera, requestedFPS);
+
+        if (previewFpsRange == null) {
+            throw new RuntimeException("Could not find suitable preview frames per second range.");
+        }
+
+        Camera.Parameters parameters = camera.getParameters();
+
+        if (pictureSize != null) {
+            parameters.setPictureSize(pictureSize.getWidth(), pictureSize.getHeight());
+        }
+
+        parameters.setPreviewSize(previewSize.getWidth(), previewSize.getHeight());
+        parameters.setPreviewFpsRange(
+                previewFpsRange[Camera.Parameters.PREVIEW_FPS_MIN_INDEX],
+                previewFpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]);
+        parameters.setPreviewFormat(ImageFormat.NV21);
+
+        rotateCamera(camera, parameters, requestedCameraId);
+
+        if (focusMode != null) {
+
+            if (parameters.getSupportedFocusModes().contains(focusMode)) {
+                parameters.setFocusMode(focusMode);
+            } else {
+                Log.i(TAG, "The camera focus mode: " + focusMode + " is not supported on this device.");
+            }
+        }
+
+        focusMode = parameters.getFocusMode();
+
+        if (flashMode != null) {
+
+            if (parameters.getSupportedFlashModes().contains(flashMode)) {
+                parameters.setFlashMode(flashMode);
+            } else {
+                Log.i(TAG, "The camera flash mode: " + flashMode + " is not supported on this device.");
+            }
+        }
+
+        flashMode = parameters.getFlashMode();
+
+        camera.setParameters(parameters);
+
+        // Four frame buffers are needed for working with the application:
+        //
+        // - one for the frame that is currently being executed upon in doing detection.
+        // - one for the next pending frame to process immediately upon completing detection.
+        // - two for the frames that the application uses to populate future preview images.
+        camera.setPreviewCallbackWithBuffer(new CameraPreviewCallback());
+        camera.addCallbackBuffer(createPreviewBuffer(previewSize));
+        camera.addCallbackBuffer(createPreviewBuffer(previewSize));
+        camera.addCallbackBuffer(createPreviewBuffer(previewSize));
+        camera.addCallbackBuffer(createPreviewBuffer(previewSize));
+
+        return camera;
+    }
 
     /**
      *  Opens the camera and starts sending preview frames to the underlying detector. The supplied
@@ -331,200 +333,15 @@ public class Camera1Controller {
         }
     }
 
-    /**
-     *  Performs the zoom operation on the camera.
-     *
-     * @param   _scale      The zoom scale.
-     * @return              The current zoom of the camera.
-     */
-    public int doZoom(float _scale) {
-
-        synchronized (cameraLock) {
-
-            if (camera == null) return 0;
-
-            int currentZoom = 0;
-            int maxZoom;
-            float newZoom;
-
-            Camera.Parameters parameters = camera.getParameters();
-
-            if (!parameters.isZoomSupported()) {
-                return currentZoom;
-            }
-
-            maxZoom = parameters.getMaxZoom();
-            currentZoom = parameters.getZoom() + 1;
-
-            if (_scale > 1) {
-                newZoom = currentZoom + _scale * (maxZoom / 10);
-            } else {
-                newZoom = currentZoom * _scale;
-            }
-            currentZoom = Math.round(newZoom) - 1;
-
-            if (currentZoom < 0) {
-                currentZoom = 0;
-            } else if (currentZoom > maxZoom) {
-                currentZoom = maxZoom;
-            }
-            parameters.setZoom(currentZoom);
-            camera.setParameters(parameters);
-
-            return currentZoom;
-        }
-    }
+    //==============================================================================================
+    //                                  Execution methods
+    //==============================================================================================
 
     /**
-     *  Initiates taking a picture, which happens asynchronously. The camera source should have been
-     * activated previously with start() or start(SurfaceHolder). The camera preview is suspended
-     * while the picture is being taken, but will resume once picture taking is done.
-     *
-     * @param   _shutter    The callback for image capture moment, or null.
-     * @param   _jpeg       The callback for JPEG image data, or null.
-     */
-    public void takePicture(ShutterCallback _shutter, PictureCallback _jpeg) {
-
-        synchronized (cameraLock) {
-
-            if (camera != null) {
-
-                PictureStartCallback startCallback = new PictureStartCallback();
-                startCallback.mDelegate = _shutter;
-                PictureDoneCallback doneCallback = new PictureDoneCallback();
-                doneCallback.mDelegate = _jpeg;
-
-                camera.takePicture(startCallback, null, null, doneCallback);
-            }
-        }
-    }
-
-    /**
-     *  Starts camera's auto-focus and registers a callback function to run when the camera is
-     * focused.
-     *
-     * @param   _cb         The callback to run.
-     */
-    public void autoFocus(@Nullable AutoFocusCallback _cb) {
-
-        synchronized (cameraLock) {
-
-            if (camera != null) {
-
-                CameraAutoFocusCallback autoFocusCallback = null;
-
-                if (_cb != null) {
-                    autoFocusCallback = new CameraAutoFocusCallback();
-                    autoFocusCallback.mDelegate = _cb;
-                }
-
-                camera.autoFocus(autoFocusCallback);
-            }
-        }
-    }
-
-    /**
-     *  Cancels any auto-focus function in progress. Whether or not auto-focus is currently in progress,
-     * this function will return the focus position to the default. If the camera does not support
-     * auto-focus, this is a no-op.
-     */
-    public void cancelAutoFocus() {
-
-        synchronized (cameraLock) {
-
-            if (camera != null) {
-                camera.cancelAutoFocus();
-            }
-        }
-    }
-
-    /**
-     *  Opens the camera and applies the user settings.
-     *
-     * @throws  RuntimeException        If the method fails.
-     */
-    @SuppressLint("InlinedApi")
-    private Camera createCamera() {
-
-        int requestedCameraId = getIdForRequestedCamera(facing);
-
-        if (requestedCameraId == -1) {
-            throw new RuntimeException("Could not find requested camera.");
-        }
-
-        Camera camera = Camera.open(requestedCameraId);
-        SizePair sizePair = selectSizePair(camera, maxPreviewWidth, maxPreviewHeight);
-
-        if (sizePair == null) {
-            throw new RuntimeException("Could not find suitable preview size.");
-        }
-
-        Size pictureSize = sizePair.pictureSize();
-        previewSize = sizePair.previewSize();
-
-        int[] previewFpsRange = selectPreviewFpsRange(camera, requestedFPS);
-
-        if (previewFpsRange == null) {
-            throw new RuntimeException("Could not find suitable preview frames per second range.");
-        }
-
-        Camera.Parameters parameters = camera.getParameters();
-
-        if (pictureSize != null) {
-            parameters.setPictureSize(pictureSize.getWidth(), pictureSize.getHeight());
-        }
-
-        parameters.setPreviewSize(previewSize.getWidth(), previewSize.getHeight());
-        parameters.setPreviewFpsRange(
-                previewFpsRange[Camera.Parameters.PREVIEW_FPS_MIN_INDEX],
-                previewFpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]);
-        parameters.setPreviewFormat(ImageFormat.NV21);
-
-        rotateCamera(camera, parameters, requestedCameraId);
-
-        if (focusMode != null) {
-
-            if (parameters.getSupportedFocusModes().contains(focusMode)) {
-                parameters.setFocusMode(focusMode);
-            } else {
-                Log.i(TAG, "The camera focus mode: " + focusMode + " is not supported on this device.");
-            }
-        }
-
-        focusMode = parameters.getFocusMode();
-
-        if (flashMode != null) {
-
-            if (parameters.getSupportedFlashModes().contains(flashMode)) {
-                parameters.setFlashMode(flashMode);
-            } else {
-                Log.i(TAG, "The camera flash mode: " + flashMode + " is not supported on this device.");
-            }
-        }
-
-        flashMode = parameters.getFlashMode();
-
-        camera.setParameters(parameters);
-
-        // Four frame buffers are needed for working with the application:
-        //
-        // - one for the frame that is currently being executed upon in doing detection.
-        // - one for the next pending frame to process immediately upon completing detection.
-        // - two for the frames that the application uses to populate future preview images.
-        camera.setPreviewCallbackWithBuffer(new CameraPreviewCallback());
-        camera.addCallbackBuffer(createPreviewBuffer(previewSize));
-        camera.addCallbackBuffer(createPreviewBuffer(previewSize));
-        camera.addCallbackBuffer(createPreviewBuffer(previewSize));
-        camera.addCallbackBuffer(createPreviewBuffer(previewSize));
-
-        return camera;
-    }
-
-    /**
-     *  Gets the id for the camera specified by the direction it is facing. Returns -1 if no such
+     *  Gets the id for the camera specified by the direction it is selectedCamera. Returns -1 if no such
      * camera was found.
      *
-     * @param   _facing     The desired camera (front-facing or rear-facing).
+     * @param   _facing     The desired camera (front-selectedCamera or rear-selectedCamera).
      */
     private static int getIdForRequestedCamera(int _facing) {
 
@@ -669,10 +486,8 @@ public class Camera1Controller {
      */
     private void rotateCamera(Camera _camera, Camera.Parameters _parameters, int _cameraId) {
 
-        WindowManager windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-
         int degrees = 0;
-        int rotation = windowManager.getDefaultDisplay().getRotation();
+        int rotation = ScreenManager.getScreenRotation(context);
 
         switch (rotation) {
             case Surface.ROTATION_0:
@@ -700,7 +515,7 @@ public class Camera1Controller {
         if (cameraInfo.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
             angle = (cameraInfo.orientation + degrees) % 360;
             displayAngle = (360 - angle); // compensate for it being mirrored
-        } else {  // back-facing
+        } else {  // back-selectedCamera
             angle = (cameraInfo.orientation - degrees + 360) % 360;
             displayAngle = angle;
         }
@@ -745,6 +560,21 @@ public class Camera1Controller {
     }
 
     //==============================================================================================
+    //                              Callbacks/Static classes
+    //==============================================================================================
+
+    /**
+     *  Called when the camera has a new preview frame.
+     */
+    private class CameraPreviewCallback implements Camera.PreviewCallback {
+
+        @Override
+        public void onPreviewFrame(byte[] _data, Camera _camera) {
+            frameProcessor.setNextFrame(_data, _camera);
+        }
+    }
+
+    //==============================================================================================
     //                                  Camera builder
     //==============================================================================================
 
@@ -778,13 +608,13 @@ public class Camera1Controller {
         }
 
         /**
-         *  Sets the requested frame rate in frames per second.  If the exact requested value is not
+         *  Sets the requested frame rate in frames per second. If the exact requested value is not
          * not available, the best matching available value is selected (Default: 30).
          */
         public Builder setRequestedFps(float _fps) {
 
             if (_fps <= 0) {
-                throw new IllegalArgumentException("Invalid fps: " + _fps);
+                throw new IllegalArgumentException("Invalid FPS value: " + _fps);
             }
 
             cameraController.requestedFPS = _fps;
@@ -814,7 +644,11 @@ public class Camera1Controller {
 
         /**
          *  Sets the desired width and height of the application frames in pixels. If the exact desired
-         * values are not available options, the best matching available options are selected.
+         * values are not available options, the best matching available options are selected.*
+         *
+         * @param   _width      The desired width.
+         * @param   _height     The desired height.
+         * @return              A new builder object.
          */
         public Builder setRequestedPreviewSize(int _width, int _height) {
 
@@ -834,8 +668,8 @@ public class Camera1Controller {
         }
 
         /**
-         *  Sets the camera facing to use -- either CAMERA_FACING_BACK or CAMERA_FACING_FRONT
-         * (Default: back facing).
+         *  Sets the camera selectedCamera to use -- either CAMERA_FACING_BACK or CAMERA_FACING_FRONT
+         * (Default: back selectedCamera).
          */
         public Builder setFacing(int _facing) {
 
@@ -843,7 +677,7 @@ public class Camera1Controller {
                 throw new IllegalArgumentException("Invalid com.project.util: " + _facing);
             }
 
-            cameraController.facing = _facing;
+            cameraController.selectedCamera = _facing;
 
             return this;
         }
@@ -858,128 +692,6 @@ public class Camera1Controller {
             return cameraController;
         }
 
-    }
-
-    //==============================================================================================
-    //                                      Callbacks
-    //==============================================================================================
-
-    /**
-     *  Called when the camera has a new preview frame.
-     */
-    private class CameraPreviewCallback implements Camera.PreviewCallback {
-
-        @Override
-        public void onPreviewFrame(byte[] data, Camera camera) {
-            frameProcessor.setNextFrame(data, camera);
-        }
-    }
-
-    /**
-     *  Wraps the camera1 shutter callback so that the deprecated API isn't exposed.
-     */
-    private class PictureStartCallback implements Camera.ShutterCallback {
-
-        private ShutterCallback mDelegate;
-
-        @Override
-        public void onShutter() {
-
-            if (mDelegate != null) {
-                mDelegate.onShutter();
-            }
-        }
-    }
-
-    /**
-     *  Wraps the final callback in the camera sequence, so that we can automatically turn the camera
-     * preview back on after the picture has been taken.
-     */
-    private class PictureDoneCallback implements Camera.PictureCallback {
-
-        private PictureCallback mDelegate;
-
-        @Override
-        public void onPictureTaken(byte[] data, Camera camera) {
-
-            if (mDelegate != null) {
-                mDelegate.onPictureTaken(data);
-            }
-
-            synchronized (cameraLock) {
-
-                if (Camera1Controller.this.camera != null) {
-                    Camera1Controller.this.camera.startPreview();
-                }
-            }
-        }
-    }
-
-    /**
-     *  Wraps the camera1 auto focus callback so that the deprecated API isn't exposed.
-     */
-    private class CameraAutoFocusCallback implements Camera.AutoFocusCallback {
-
-        private AutoFocusCallback mDelegate;
-
-        @Override
-        public void onAutoFocus(boolean success, Camera camera) {
-
-            if (mDelegate != null) {
-                mDelegate.onAutoFocus(success);
-            }
-        }
-    }
-
-    //==============================================================================================
-    //                                  Public interfaces
-    //==============================================================================================
-
-    /**
-     *  Callback interface used to signal the moment of actual image capture.
-     */
-    public interface ShutterCallback {
-        /**
-         *  Called as near as possible to the moment when a photo is captured from the sensor.
-         */
-        void onShutter();
-    }
-
-    /**
-     *  Callback interface used to supply image data from a photo capture.
-     */
-    public interface PictureCallback {
-        /**
-         *  Called when image data is available after a picture is taken.  The format of the data
-         * is a jpeg binary.
-         */
-        void onPictureTaken(byte[] _data);
-    }
-
-    /**
-     *  Callback interface used to notify on completion of application auto focus.
-     */
-    public interface AutoFocusCallback {
-        /**
-         *  Called when the application auto focus completes. If the application does not support
-         * auto-focus and autoFocus is called, onAutoFocus will be called immediately with a fake
-         * value of success set to true.
-         *
-         * @param   _success    'true' if focus was successful, 'false' otherwise.
-         */
-        void onAutoFocus(boolean _success);
-    }
-
-    /**
-     *  Callback interface used to notify on auto focus start and stop.
-     */
-    public interface AutoFocusMoveCallback {
-        /**
-         *  Called when the com.project.util auto focus starts or stops.
-         *
-         * @param   _start      'true' if focus starts to move, 'false' if focus stops to move
-         */
-        void onAutoFocusMoving(boolean _start);
     }
 
 }

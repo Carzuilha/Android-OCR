@@ -14,7 +14,7 @@ import java.util.List;
 
 /**
  *  Graphic instance for rendering TextBlock position, size, and ID within an associated graphic
- * overlay view.
+ * graphicView view.
  */
 public class OcrGraphic extends Graphic {
 
@@ -29,7 +29,7 @@ public class OcrGraphic extends Graphic {
     /**
      *  Initializes the OCR graphic and sets its parameters.
      *
-     * @param   _overlay    The graphic overlay.
+     * @param   _overlay    The graphic graphicView.
      * @param   _text       The TextBlock used to draw the detected text.
      */
     public OcrGraphic(GraphicView _overlay, TextBlock _text) {
@@ -87,7 +87,7 @@ public class OcrGraphic extends Graphic {
 
     /**
      *  Checks whether a point is within the bounding box of this graphic. The provided point should
-     * be relative to this graphic's containing overlay.
+     * be relative to this graphic's containing graphicView.
      *
      * @param   _x          An x parameter in the relative context of the canvas.
      * @param   _y          A y parameter in the relative context of the canvas.
@@ -109,14 +109,14 @@ public class OcrGraphic extends Graphic {
      * scale.
      */
     public float scaleX(float _horizontal) {
-        return _horizontal * mOverlay.getWidthScaleFactor();
+        return _horizontal * graphicView.getWidthScaleFactor();
     }
 
     /**
      *  Adjusts a vertical value of the supplied value from the preview scale to the view scale.
      */
     public float scaleY(float _vertical) {
-        return _vertical * mOverlay.getHeightScaleFactor();
+        return _vertical * graphicView.getHeightScaleFactor();
     }
 
     /**
@@ -124,8 +124,8 @@ public class OcrGraphic extends Graphic {
      * system.
      */
     public float translateX(float _x) {
-        if (mOverlay.getFacing() == CameraSource.CAMERA_FACING_FRONT) {
-            return mOverlay.getWidth() - scaleX(_x);
+        if (graphicView.getCameraType() == CameraSource.CAMERA_FACING_FRONT) {
+            return graphicView.getWidth() - scaleX(_x);
         } else {
             return scaleX(_x);
         }

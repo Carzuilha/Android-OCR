@@ -39,7 +39,7 @@ import java.io.IOException;
  */
 public final class MainActivity extends AppCompatActivity {
 
-    public static boolean USE_OLD_CAMERA = false;
+    public static boolean USE_LEGACY_CAMERA = false;
 
     //  Intent request code to handle updating play services if needed.
     private static final int RC_HANDLE_GMS = 9001;
@@ -236,19 +236,19 @@ public final class MainActivity extends AppCompatActivity {
             }
         }
 
-        if (USE_OLD_CAMERA) {
+        if (USE_LEGACY_CAMERA) {
             camera1Controller =
                     new Camera1Controller.Builder(getApplicationContext(), textRecognizer)
+                            .setRequestedPreviewSize(1280, 720)
                             .setFacing(Camera1Controller.CAMERA_FACING_BACK)
                             .setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO)
-                            .setRequestedPreviewSize(1280, 1024)
                             .setRequestedFps(2.0f)
-                            .setFlashMode(null)
                             .build();
         }
         else {
             camera2Controller =
                     new Camera2Controller.Builder(getApplicationContext(), textRecognizer)
+                            .setRequestedPreviewSize(1280, 720)
                             .setFacing(Camera2Controller.CAMERA_FACING_BACK)
                             .setFocusMode(Camera2Controller.CAMERA_AF_AUTO)
                             .build();
@@ -273,7 +273,7 @@ public final class MainActivity extends AppCompatActivity {
             dlg.show();
         }
 
-        if (USE_OLD_CAMERA) {
+        if (USE_LEGACY_CAMERA) {
 
             if (camera1Controller != null) {
 
@@ -303,8 +303,6 @@ public final class MainActivity extends AppCompatActivity {
                 }
             }
         }
-
-
     }
 
 }
