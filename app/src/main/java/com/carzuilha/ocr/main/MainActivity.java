@@ -239,18 +239,17 @@ public final class MainActivity extends AppCompatActivity {
         if (USE_LEGACY_CAMERA) {
             camera1Controller =
                     new Camera1Controller.Builder(getApplicationContext(), textRecognizer)
-                            .setRequestedPreviewSize(1280, 720)
-                            .setFacing(Camera1Controller.CAMERA_FACING_BACK)
-                            .setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO)
-                            .setRequestedFps(2.0f)
+                            .previewSize(1280, 720)
+                            .camera(Camera1Controller.CAMERA_FACING_BACK)
+                            .focus(Camera.Parameters.FOCUS_MODE_AUTO)
                             .build();
         }
         else {
             camera2Controller =
                     new Camera2Controller.Builder(getApplicationContext(), textRecognizer)
-                            .setRequestedPreviewSize(1280, 720)
-                            .setFacing(Camera2Controller.CAMERA_FACING_BACK)
-                            .setFocusMode(Camera2Controller.CAMERA_AF_AUTO)
+                            .previewSize(1280, 720)
+                            .camera(Camera2Controller.CAMERA_FACING_BACK)
+                            .focus(Camera2Controller.CAMERA_AF_AUTO)
                             .build();
         }
 

@@ -22,7 +22,6 @@ import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
-import android.hardware.camera2.params.MeteringRectangle;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
@@ -30,13 +29,11 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.support.annotation.RequiresPermission;
 import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.util.Range;
 import android.util.SparseIntArray;
-import android.view.MotionEvent;
 import android.view.Surface;
 
 import com.carzuilha.ocr.thread.Camera2Runnable;
@@ -65,7 +62,7 @@ import java.util.concurrent.TimeUnit;
 public class Camera2Controller {
 
     //  Defines the tag of the class.
-    private static final String TAG = "Camera2Controller";
+    public static final String TAG = "Camera2Controller";
 
     //  Defines the camera type.
     @SuppressLint("InlinedApi")
@@ -76,6 +73,10 @@ public class Camera2Controller {
     //  If the absolute difference between a preview size aspect ratio and a picture size aspect
     // ratio is less than this tolerance, they are considered to be the same aspect ratio.
     private static final double ASPECT_RATIO_TOLERANCE = 0.01;
+
+    //  Defines the camera FPS. It is possible to let the user changes the value, but (for now) I
+    // found it to unstable.
+    private static final float REQUESTED_FPS = 30.0f;
 
     //  Defines all the focus modes from a camera.
     public static final int CAMERA_AF_OFF = CaptureRequest.CONTROL_AF_MODE_OFF;
@@ -119,7 +120,7 @@ public class Camera2Controller {
         INVERSE_ORIENTATIONS.append(Surface.ROTATION_270, 0);
     }
 
-    //  Max preview width, height, requested FPS and ratio tolerance.
+    //  Max preview width, height, and ratio tolerance.
     private int maxPreviewWidth = 1920;
     private int maxPreviewHeight = 1080;
     private double maxRatioTolerance = 0.18;
@@ -137,11 +138,10 @@ public class Camera2Controller {
     private int orientation;
 
     //  A set of references for all the resources to camera manipulation.
-    private String cameraId;
     private CameraDevice cameraDevice;
     private CameraManager cameraManager = null;
     private CameraCaptureSession captureSession;
-    private Semaphore mCameraOpenCloseLock = new Semaphore(1);
+    private Semaphore cameraSemaphore = new Semaphore(1);
 
     //  The preview size and the context of the camera source.
     private Size previewSize;
@@ -163,12 +163,12 @@ public class Camera2Controller {
     private CaptureRequest previewRequest;
 
     //  A set of flags utilized during the camera execution.
+    private boolean flashSupported;
     private boolean cameraStarted = false;
     private boolean swappedDimensions = false;
     private boolean isMeteringAreaAFSupported = false;
 
     //  A set of camera callbacks.
-    private boolean flashSupported;
     private ShutterCallback shutterCallback;
     private AutoFocusCallback autoFocusCallback;
 
@@ -302,16 +302,16 @@ public class Camera2Controller {
         @Override
         public void onOpened(@NonNull CameraDevice _cameraDevice) {
 
-            mCameraOpenCloseLock.release();
+            cameraSemaphore.release();
 
             Camera2Controller.this.cameraDevice = _cameraDevice;
-            createCameraPreviewSession();
+            createCaptureSession();
         }
 
         @Override
         public void onDisconnected(@NonNull CameraDevice _cameraDevice) {
 
-            mCameraOpenCloseLock.release();
+            cameraSemaphore.release();
 
             _cameraDevice.close();
             Camera2Controller.this.cameraDevice = null;
@@ -320,7 +320,7 @@ public class Camera2Controller {
         @Override
         public void onError(@NonNull CameraDevice _cameraDevice, int _error) {
 
-            mCameraOpenCloseLock.release();
+            cameraSemaphore.release();
 
             _cameraDevice.close();
             Camera2Controller.this.cameraDevice = null;
@@ -403,7 +403,7 @@ public class Camera2Controller {
     /**
      * Creates a new capture session for camera preview.
      */
-    private void createCameraPreviewSession() {
+    private void createCaptureSession() {
 
         try {
 
@@ -522,7 +522,7 @@ public class Camera2Controller {
                 processingThread = null;
             }
 
-            mCameraOpenCloseLock.acquire();
+            cameraSemaphore.acquire();
 
             if (null != captureSession) {
                 captureSession.close();
@@ -548,7 +548,7 @@ public class Camera2Controller {
             throw new RuntimeException("Interrupted while trying to lock camera closing.", e);
         } finally {
 
-            mCameraOpenCloseLock.release();
+            cameraSemaphore.release();
             stopBackgroundThread();
         }
     }
@@ -594,8 +594,8 @@ public class Camera2Controller {
         for (Size option : _choices) {
 
             if (option.getWidth() <= _maxWidth &&
-                    option.getHeight() <= _maxHeight &&
-                    option.getHeight() == option.getWidth() * h / w) {
+                option.getHeight() <= _maxHeight &&
+                option.getHeight() == option.getWidth() * h / w) {
 
                 if (option.getWidth() >= _textureWidth && option.getHeight() >= _textureHeight) {
                     bigEnough.add(option);
@@ -616,6 +616,44 @@ public class Camera2Controller {
             Log.e(TAG, "Couldn't find any suitable preview size.");
             return _choices[0];
         }
+    }
+
+    /**
+     *  Selects the most suitable preview frames per second range, given the desired frames per
+     * second.
+     *
+     * @param   _cameraCharacteristics      The camera characteristics.
+     * @return                              The selected preview frames per second range.
+     */
+    private Range<Integer> selectPreviewFpsRange(CameraCharacteristics _cameraCharacteristics) {
+
+        //  The application API uses integers scaled by a factor of 1000 instead of floating-point frame
+        // rates.
+        int desiredPreviewFpsScaled = (int) (REQUESTED_FPS * 1000.0f);
+
+        //  The method for selecting the best range is to minimize the sum of the differences between
+        // the desired value and the upper and lower bounds of the range. This may camera a range
+        // that the desired value is outside of, but this is often preferred. For example, if the
+        // desired frame rate is 29.97, the range (30, 30) is probably more desirable than the
+        // range (15, 30).
+        Range selectedFpsRange = null;
+        int minDiff = Integer.MAX_VALUE;
+
+        Range<Integer>[] previewFpsRangeList = _cameraCharacteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+
+        for (Range<Integer> range : previewFpsRangeList) {
+
+            int deltaMin = desiredPreviewFpsScaled - range.getLower();
+            int deltaMax = desiredPreviewFpsScaled - range.getUpper();
+            int diff = Math.abs(deltaMin) + Math.abs(deltaMax);
+
+            if (diff < minDiff) {
+                selectedFpsRange = range;
+                minDiff = diff;
+            }
+        }
+
+        return selectedFpsRange;
     }
 
     /**
@@ -777,7 +815,7 @@ public class Camera2Controller {
                 return;
             }
 
-            if (!mCameraOpenCloseLock.tryAcquire(2500, TimeUnit.MILLISECONDS)) {
+            if (!cameraSemaphore.tryAcquire(2500, TimeUnit.MILLISECONDS)) {
                 throw new RuntimeException("Time out waiting to lock camera opening.");
             }
 
@@ -785,7 +823,7 @@ public class Camera2Controller {
                 cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
             }
 
-            cameraId = cameraManager.getCameraIdList()[selectedCamera];
+            String cameraId = cameraManager.getCameraIdList()[selectedCamera];
 
             CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
             StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -797,7 +835,7 @@ public class Camera2Controller {
             //  For still image captures, we use the largest available size.
             Size largest = getBestAspectPictureSize(map.getOutputSizes(ImageFormat.JPEG));
 
-            imageReaderStill = ImageReader.newInstance(largest.getWidth(), largest.getHeight(), ImageFormat.JPEG, /*maxImages*/2);
+            imageReaderStill = ImageReader.newInstance(largest.getWidth(), largest.getHeight(), ImageFormat.JPEG, 2);
             imageReaderStill.setOnImageAvailableListener(onImageAvailableListener, backgroundHandler);
             sensorArraySize = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
 
@@ -1158,9 +1196,23 @@ public class Camera2Controller {
         }
 
         /**
+         *  Sets the camera to use -- either CAMERA_FACING_BACK or CAMERA_FACING_FRONT (Default:
+         *  back camera).
+         */
+        public Builder camera(int facing) {
+
+            if ((facing != CAMERA_FACING_BACK) && (facing != CAMERA_FACING_FRONT)) {
+                throw new IllegalArgumentException("Invalid camera: " + facing);
+            }
+
+            cameraController.selectedCamera = facing;
+            return this;
+        }
+
+        /**
          *  Sets the focus mode of the camera.
          */
-        public Builder setFocusMode(int mode) {
+        public Builder focus(int mode) {
             cameraController.focusMode = mode;
             return this;
         }
@@ -1168,7 +1220,7 @@ public class Camera2Controller {
         /**
          *  Sets the flash mode of the camera.
          */
-        public Builder setFlashMode(int mode) {
+        public Builder flash(int mode) {
             cameraController.flashMode = mode;
             return this;
         }
@@ -1181,7 +1233,7 @@ public class Camera2Controller {
          * @param   _height     The desired height.
          * @return              A new builder object.
          */
-        public Builder setRequestedPreviewSize(int _width, int _height) {
+        public Builder previewSize(int _width, int _height) {
 
             // Restrict the requested range to something within the realm of possibility.  The
             // choice of 1000000 is a bit arbitrary -- intended to be well beyond resolutions that
@@ -1199,24 +1251,13 @@ public class Camera2Controller {
         }
 
         /**
-         *  Sets the camera selectedCamera to use -- either CAMERA_FACING_BACK or CAMERA_FACING_FRONT
-         * (Default: back selectedCamera).
-         */
-        public Builder setFacing(int facing) {
-            if ((facing != CAMERA_FACING_BACK) && (facing != CAMERA_FACING_FRONT)) {
-                throw new IllegalArgumentException("Invalid camera: " + facing);
-            }
-            cameraController.selectedCamera = facing;
-            return this;
-        }
-
-        /**
          *  Creates an instance of the camera source.
          */
         public Camera2Controller build() {
+
             cameraController.frameProcessor = new Camera2Runnable(detector, cameraController);
+
             return cameraController;
         }
     }
-
 }

@@ -8,6 +8,7 @@ import com.google.android.gms.common.images.Size;
  * ratio as the preview size or the preview may end up being distorted.  If the picture size is
  * null, then there is no picture size with the same aspect ratio as the preview size.
  */
+@SuppressWarnings("deprecation")
 public class SizePair {
 
     //  The preview and picture size.

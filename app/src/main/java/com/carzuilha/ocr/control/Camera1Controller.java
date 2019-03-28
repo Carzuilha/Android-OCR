@@ -6,12 +6,10 @@ import android.content.Context;
 import android.graphics.ImageFormat;
 import android.hardware.Camera;
 import android.hardware.Camera.CameraInfo;
-import android.support.annotation.Nullable;
 import android.support.annotation.RequiresPermission;
 import android.support.annotation.StringDef;
 import android.util.Log;
 import android.view.Surface;
-import android.view.WindowManager;
 
 import com.carzuilha.ocr.model.SizePair;
 import com.carzuilha.ocr.thread.Camera1Runnable;
@@ -37,7 +35,7 @@ import java.util.Map;
 public class Camera1Controller {
 
     //  Defines the tag of the class.
-    private static final String TAG = "Camera1Controller";
+    public static final String TAG = "Camera1Controller";
 
     //  Defines the camera type.
     @SuppressLint("InlinedApi")
@@ -48,6 +46,10 @@ public class Camera1Controller {
     //  If the absolute difference between a preview size aspect ratio and a picture size aspect
     // ratio is less than this tolerance, they are considered to be the same aspect ratio.
     private static final float ASPECT_RATIO_TOLERANCE = 0.01f;
+
+    //  Defines the camera FPS. It is possible to let the user changes the value, but (for now) I
+    // found it to unstable.
+    private static final float REQUESTED_FPS = 30.0f;
 
     //  Defines all the focus modes from a camera.
     @StringDef({
@@ -74,10 +76,9 @@ public class Camera1Controller {
     private @interface FlashMode {}
 
     //  These values may be requested by the caller.  Due to hardware limitations, we may need to
-    // select close, but not exactly the same values for these.
+    // camera close, but not exactly the same values for these.
     private int maxPreviewWidth = 1024;
     private int maxPreviewHeight = 768;
-    private float requestedFPS = 30.0f;
 
     //  Defines the default camera.
     private int selectedCamera = CAMERA_FACING_BACK;
@@ -175,19 +176,17 @@ public class Camera1Controller {
 
     /**
      *  Opens the camera and applies the user settings.
-     *
-     * @throws  RuntimeException        If the method fails.
      */
     @SuppressLint("InlinedApi")
-    private Camera createCamera() {
+    private void initializeCamera() {
 
-        int requestedCameraId = getIdForRequestedCamera(selectedCamera);
+        int requestedCameraId = getSelectedCameraId(selectedCamera);
 
         if (requestedCameraId == -1) {
-            throw new RuntimeException("Could not find requested camera.");
+            throw new RuntimeException("Could not find the requested camera.");
         }
 
-        Camera camera = Camera.open(requestedCameraId);
+        camera = Camera.open(requestedCameraId);
         SizePair sizePair = selectSizePair(camera, maxPreviewWidth, maxPreviewHeight);
 
         if (sizePair == null) {
@@ -197,10 +196,10 @@ public class Camera1Controller {
         Size pictureSize = sizePair.pictureSize();
         previewSize = sizePair.previewSize();
 
-        int[] previewFpsRange = selectPreviewFpsRange(camera, requestedFPS);
+        int[] previewFpsRange = selectPreviewFpsRange(camera);
 
         if (previewFpsRange == null) {
-            throw new RuntimeException("Could not find suitable preview frames per second range.");
+            throw new RuntimeException("Could not find the suitable preview FPS range.");
         }
 
         Camera.Parameters parameters = camera.getParameters();
@@ -209,11 +208,11 @@ public class Camera1Controller {
             parameters.setPictureSize(pictureSize.getWidth(), pictureSize.getHeight());
         }
 
+        parameters.setPreviewFormat(ImageFormat.NV21);
         parameters.setPreviewSize(previewSize.getWidth(), previewSize.getHeight());
         parameters.setPreviewFpsRange(
                 previewFpsRange[Camera.Parameters.PREVIEW_FPS_MIN_INDEX],
                 previewFpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]);
-        parameters.setPreviewFormat(ImageFormat.NV21);
 
         rotateCamera(camera, parameters, requestedCameraId);
 
@@ -251,8 +250,6 @@ public class Camera1Controller {
         camera.addCallbackBuffer(createPreviewBuffer(previewSize));
         camera.addCallbackBuffer(createPreviewBuffer(previewSize));
         camera.addCallbackBuffer(createPreviewBuffer(previewSize));
-
-        return camera;
     }
 
     /**
@@ -264,13 +261,14 @@ public class Camera1Controller {
      *                                  display.
      */
     @RequiresPermission(Manifest.permission.CAMERA)
-    public Camera1Controller start(DynamicTextureView _dynamicTextureView) throws IOException {
+    public void start(DynamicTextureView _dynamicTextureView) throws IOException {
 
         synchronized (cameraLock) {
 
-            if (camera != null) return this;
+            if (camera != null) return;
 
-            camera = createCamera();
+            initializeCamera();
+
             camera.setPreviewTexture(_dynamicTextureView.getSurfaceTexture());
             camera.startPreview();
 
@@ -278,8 +276,6 @@ public class Camera1Controller {
             frameProcessor.setActive(true);
             processingThread.start();
         }
-
-        return this;
     }
 
     /**
@@ -343,7 +339,7 @@ public class Camera1Controller {
      *
      * @param   _facing     The desired camera (front-selectedCamera or rear-selectedCamera).
      */
-    private static int getIdForRequestedCamera(int _facing) {
+    private static int getSelectedCameraId(int _facing) {
 
         CameraInfo cameraInfo = new CameraInfo();
 
@@ -362,7 +358,7 @@ public class Camera1Controller {
     /**
      *  Selects the most suitable preview and picture size, given the desired width and height.
      *
-     * @param   _camera         The camera to select a preview size from.
+     * @param   _camera         The camera to camera a preview size from.
      * @param   _desiredWidth   The desired width of the camera preview frames.
      * @param   _desiredHeight  The desired height of the camera preview frames.
      * @return                  The selected preview and picture size pair.
@@ -442,18 +438,17 @@ public class Camera1Controller {
      *  Selects the most suitable preview frames per second range, given the desired frames per
      * second.
      *
-     * @param   _camera             The camera to select a frames per second range from.
-     * @param   _desiredPreviewFps  The desired frames per second for the camera preview frames.
+     * @param   _camera             The camera to camera a frames per second range from.
      * @return                      The selected preview frames per second range.
      */
-    private int[] selectPreviewFpsRange(Camera _camera, float _desiredPreviewFps) {
+    private int[] selectPreviewFpsRange(Camera _camera) {
 
         //  The application API uses integers scaled by a factor of 1000 instead of floating-point frame
         // rates.
-        int desiredPreviewFpsScaled = (int) (_desiredPreviewFps * 1000.0f);
+        int desiredPreviewFpsScaled = (int) (REQUESTED_FPS * 1000.0f);
 
         //  The method for selecting the best range is to minimize the sum of the differences between
-        // the desired value and the upper and lower bounds of the range. This may select a range
+        // the desired value and the upper and lower bounds of the range. This may camera a range
         // that the desired value is outside of, but this is often preferred. For example, if the
         // desired frame rate is 29.97, the range (30, 30) is probably more desirable than the
         // range (15, 30).
@@ -608,16 +603,16 @@ public class Camera1Controller {
         }
 
         /**
-         *  Sets the requested frame rate in frames per second. If the exact requested value is not
-         * not available, the best matching available value is selected (Default: 30).
+         *  Sets the camera to use -- either CAMERA_FACING_BACK or CAMERA_FACING_FRONT (Default:
+         *  back camera).
          */
-        public Builder setRequestedFps(float _fps) {
+        public Builder camera(int _facing) {
 
-            if (_fps <= 0) {
-                throw new IllegalArgumentException("Invalid FPS value: " + _fps);
+            if ((_facing != CAMERA_FACING_BACK) && (_facing != CAMERA_FACING_FRONT)) {
+                throw new IllegalArgumentException("Invalid com.project.util: " + _facing);
             }
 
-            cameraController.requestedFPS = _fps;
+            cameraController.selectedCamera = _facing;
 
             return this;
         }
@@ -625,7 +620,7 @@ public class Camera1Controller {
         /**
          *  Sets the focus mode of the camera.
          */
-        public Builder setFocusMode(@FocusMode String _mode) {
+        public Builder focus(@FocusMode String _mode) {
 
             cameraController.focusMode = _mode;
 
@@ -635,7 +630,7 @@ public class Camera1Controller {
         /**
          *  Sets the flash mode of the camera.
          */
-        public Builder setFlashMode(@FlashMode String _mode) {
+        public Builder flash(@FlashMode String _mode) {
 
             cameraController.flashMode = _mode;
 
@@ -650,7 +645,7 @@ public class Camera1Controller {
          * @param   _height     The desired height.
          * @return              A new builder object.
          */
-        public Builder setRequestedPreviewSize(int _width, int _height) {
+        public Builder previewSize(int _width, int _height) {
 
             // Restrict the requested range to something within the realm of possibility.  The
             // choice of 1000000 is a bit arbitrary -- intended to be well beyond resolutions that
@@ -668,21 +663,6 @@ public class Camera1Controller {
         }
 
         /**
-         *  Sets the camera selectedCamera to use -- either CAMERA_FACING_BACK or CAMERA_FACING_FRONT
-         * (Default: back selectedCamera).
-         */
-        public Builder setFacing(int _facing) {
-
-            if ((_facing != CAMERA_FACING_BACK) && (_facing != CAMERA_FACING_FRONT)) {
-                throw new IllegalArgumentException("Invalid com.project.util: " + _facing);
-            }
-
-            cameraController.selectedCamera = _facing;
-
-            return this;
-        }
-
-        /**
          *  Creates an instance of the camera source.
          */
         public Camera1Controller build() {
@@ -691,7 +671,5 @@ public class Camera1Controller {
 
             return cameraController;
         }
-
     }
-
 }
