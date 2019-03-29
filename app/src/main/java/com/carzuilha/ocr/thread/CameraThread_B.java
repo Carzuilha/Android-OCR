@@ -5,7 +5,7 @@ import android.graphics.ImageFormat;
 import android.os.SystemClock;
 import android.util.Log;
 
-import com.carzuilha.ocr.control.Camera2Controller;
+import com.carzuilha.ocr.control.CameraControl_B;
 import com.carzuilha.ocr.util.NV21Image;
 import com.google.android.gms.vision.Detector;
 import com.google.android.gms.vision.Frame;
@@ -17,25 +17,13 @@ import java.nio.ByteBuffer;
  * available from the camera. This is designed to run detection on frames as fast as possible
  * (i.e., without unnecessary context switching or waiting on the next frame).
  */
-public class Camera2Runnable implements Runnable {
+public class CameraThread_B extends CameraThread implements Runnable {
 
     //  Defines the tag of the class.
-    private static final String TAG = "Camera2Runnable";
-
-    private long startTimeMillis = SystemClock.elapsedRealtime();
-    private Detector<?> detector;
-
-    //  This lock guards all of the member variables below.
-    private boolean active = true;
-    private final Object lock = new Object();
-
-    //  These pending variables hold the state associated with the new frame awaiting processing.
-    private int pendingFrameId = 0;
-    private long pendingTimeMillis;
-    private ByteBuffer pendingFrameData;
+    private static final String TAG = "CameraThread_B";
 
     //  The camera source, which the thread will run.
-    private Camera2Controller camera2Controller;
+    private CameraControl_B camera2Controller;
 
     //==============================================================================================
     //                                  Default methods
@@ -47,8 +35,7 @@ public class Camera2Runnable implements Runnable {
      * @param   _detector               The OCR detector.
      * @param   _cameraController       Controller of the camera device.
      */
-
-    public Camera2Runnable(Detector<?> _detector, Camera2Controller _cameraController) {
+    public CameraThread_B(Detector<?> _detector, CameraControl_B _cameraController) {
         detector = _detector;
         camera2Controller = _cameraController;
     }

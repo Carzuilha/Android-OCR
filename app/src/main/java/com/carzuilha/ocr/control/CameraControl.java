@@ -8,7 +8,8 @@ import com.carzuilha.ocr.view.DynamicTextureView;
  *  Defines a generic class that manages the application in conjunction with an underlying Google's
  * detector.
  */
-public abstract class CameraController {
+@SuppressWarnings("WeakerAccess")
+public abstract class CameraControl {
 
     //  Defines a camera type.
     public static final int CAMERA_FACING_BACK = 0;
@@ -16,7 +17,7 @@ public abstract class CameraController {
 
     //  Defines the camera FPS. It is possible to let the user changes the value, but (for now) I
     // found it to unstable.
-    protected static final float REQUESTED_FPS = 30.0f;
+    protected static final float REQUESTED_FPS = 40.0f;
 
     //  If the absolute difference between a preview size aspect ratio and a picture size aspect
     // ratio is less than this tolerance, they are considered to be the same aspect ratio.

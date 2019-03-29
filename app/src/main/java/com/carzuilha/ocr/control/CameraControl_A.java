@@ -13,13 +13,12 @@ import android.util.Log;
 import android.view.Surface;
 
 import com.carzuilha.ocr.model.SizePair;
-import com.carzuilha.ocr.thread.Camera1Runnable;
+import com.carzuilha.ocr.thread.CameraThread_A;
 import com.carzuilha.ocr.util.ScreenManager;
 import com.carzuilha.ocr.view.DynamicTextureView;
 import com.google.android.gms.common.images.Size;
 import com.google.android.gms.vision.Detector;
 
-import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.ByteBuffer;
@@ -33,10 +32,10 @@ import java.util.Map;
  * Google Play Services 8.1 or higher, due to using indirect byte buffers for storing images.
  */
 @SuppressWarnings("deprecation")
-public class Camera1Controller extends CameraController {
+public class CameraControl_A extends CameraControl {
 
     //  Defines the tag of the class.
-    public static final String TAG = "Camera1Controller";
+    public static final String TAG = "CameraControl_A";
 
     //  Defines all the focus modes from a camera.
     @StringDef({
@@ -85,7 +84,7 @@ public class Camera1Controller extends CameraController {
     //  Dedicated thread and associated runnable for calling into the detector with frames, as the
     // frames become available from the camera.
     private Thread processingThread;
-    private Camera1Runnable frameProcessor;
+    private CameraThread_A frameProcessor;
 
     //  Map to convert between a byte array, received from the camera, and its associated byte buffer.
     // We use byte buffers internally because this is a more efficient way to call into
@@ -99,7 +98,7 @@ public class Camera1Controller extends CameraController {
     /**
      *  Only allow creation via the builder class.
      */
-    private Camera1Controller() { }
+    private CameraControl_A() { }
 
     /**
      *  Returns the selected camera; one of CAMERA_FACING_BACK or CAMERA_FACING_FRONT.
@@ -573,7 +572,7 @@ public class Camera1Controller extends CameraController {
         private final Detector<?> detector;
 
         //  Defines a new camera source.
-        private Camera1Controller cameraController = new Camera1Controller();
+        private CameraControl_A cameraController = new CameraControl_A();
 
         /**
          *  Creates an application source builder with the supplied context and detector. Camera
@@ -656,9 +655,9 @@ public class Camera1Controller extends CameraController {
         /**
          *  Creates an instance of the camera source.
          */
-        public Camera1Controller build() {
+        public CameraControl_A build() {
 
-            cameraController.frameProcessor = new Camera1Runnable(detector, cameraController);
+            cameraController.frameProcessor = new CameraThread_A(detector, cameraController);
 
             return cameraController;
         }

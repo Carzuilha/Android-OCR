@@ -35,7 +35,7 @@ import android.util.Range;
 import android.util.SparseIntArray;
 import android.view.Surface;
 
-import com.carzuilha.ocr.thread.Camera2Runnable;
+import com.carzuilha.ocr.thread.CameraThread_B;
 import com.carzuilha.ocr.util.NV21Image;
 import com.carzuilha.ocr.util.ScreenManager;
 import com.carzuilha.ocr.view.DynamicTextureView;
@@ -58,10 +58,10 @@ import java.util.concurrent.TimeUnit;
  * Google Play Services 8.1 or higher, due to using indirect byte buffers for storing images.
  */
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-public class Camera2Controller extends CameraController {
+public class CameraControl_B extends CameraControl {
 
     //  Defines the tag of the class.
-    public static final String TAG = "Camera2Controller";
+    public static final String TAG = "CameraControl_B";
 
     //  Defines all the focus modes from a camera.
     public static final int CAMERA_AF_OFF = CaptureRequest.CONTROL_AF_MODE_OFF;
@@ -121,9 +121,10 @@ public class Camera2Controller extends CameraController {
     private int orientation;
 
     //  A set of references for all the resources to camera manipulation.
-    private CameraDevice cameraDevice;
+    private CameraDevice cameraDevice = null;
     private CameraManager cameraManager = null;
-    private CameraCaptureSession captureSession;
+    private CameraCaptureSession captureSession = null;
+    private CameraCharacteristics cameraCharacteristics = null;
     private Semaphore cameraSemaphore = new Semaphore(1);
 
     //  The preview size and the context of the camera source.
@@ -133,7 +134,7 @@ public class Camera2Controller extends CameraController {
     //  Dedicated thread and associated runnable for calling into the detector with frames, as the
     // frames become available from the camera.
     private Thread processingThread;
-    private Camera2Runnable frameProcessor;
+    private CameraThread_B frameProcessor;
 
     //  An additional thread for running tasks that shouldn't block the UI.
     private HandlerThread backgroundThread;
@@ -177,7 +178,7 @@ public class Camera2Controller extends CameraController {
     /**
      *  Only allow creation via the builder class.
      */
-    private Camera2Controller() { }
+    private CameraControl_B() { }
 
     /**
      *  Returns the selected camera.
@@ -263,6 +264,9 @@ public class Camera2Controller extends CameraController {
             previewRequestBuilder.addTarget(surface);
             previewRequestBuilder.addTarget(imageReaderPreview.getSurface());
 
+            // Sets the FPS to the default value.
+            previewRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, selectPreviewFpsRange(cameraCharacteristics));
+
             // Here, we create a CameraCaptureSession for camera preview.
             cameraDevice.createCaptureSession(
                     Arrays.asList(surface, imageReaderPreview.getSurface(), imageReaderStill.getSurface()),
@@ -291,13 +295,13 @@ public class Camera2Controller extends CameraController {
             }
 
             if(cameraManager == null) {
-                cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+                cameraManager = (android.hardware.camera2.CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
             }
 
             String cameraId = cameraManager.getCameraIdList()[selectedCamera];
 
-            CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
-            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraId);
+            StreamConfigurationMap map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
 
             if (map == null) {
                 return;
@@ -307,9 +311,9 @@ public class Camera2Controller extends CameraController {
             Size largest = getBestAspectPictureSize(map.getOutputSizes(ImageFormat.JPEG));
 
             imageReaderStill = ImageReader.newInstance(largest.getWidth(), largest.getHeight(), ImageFormat.JPEG, 2);
-            sensorArraySize = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+            sensorArraySize = cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
 
-            Integer maxAFRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF);
+            Integer maxAFRegions = cameraCharacteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF);
 
             if(maxAFRegions != null) {
                 isMeteringAreaAFSupported = maxAFRegions >= 1;
@@ -320,7 +324,7 @@ public class Camera2Controller extends CameraController {
 
             //  Find out if we need to swap dimension to get the preview size relative to sensor
             // coordinate.
-            Integer sOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+            Integer sOrientation = cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
 
             if(sOrientation != null) {
 
@@ -391,7 +395,7 @@ public class Camera2Controller extends CameraController {
             }
 
             //  Check if the flash is supported.
-            Boolean available = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+            Boolean available = cameraCharacteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
             flashSupported = available == null ? false : available;
 
             configureTransform(width, height);
@@ -1020,7 +1024,7 @@ public class Camera2Controller extends CameraController {
 
             cameraSemaphore.release();
 
-            Camera2Controller.this.cameraDevice = _cameraDevice;
+            CameraControl_B.this.cameraDevice = _cameraDevice;
             createCaptureSession();
         }
 
@@ -1030,7 +1034,7 @@ public class Camera2Controller extends CameraController {
             cameraSemaphore.release();
 
             _cameraDevice.close();
-            Camera2Controller.this.cameraDevice = null;
+            CameraControl_B.this.cameraDevice = null;
         }
 
         @Override
@@ -1039,7 +1043,7 @@ public class Camera2Controller extends CameraController {
             cameraSemaphore.release();
 
             _cameraDevice.close();
-            Camera2Controller.this.cameraDevice = null;
+            CameraControl_B.this.cameraDevice = null;
         }
     }
 
@@ -1100,7 +1104,7 @@ public class Camera2Controller extends CameraController {
         private final Detector<?> detector;
 
         //  Defines a new camera source.
-        private Camera2Controller cameraController = new Camera2Controller();
+        private CameraControl_B cameraController = new CameraControl_B();
 
         /**
          *  Creates an application source builder with the supplied _context and _detector. Camera
@@ -1179,9 +1183,9 @@ public class Camera2Controller extends CameraController {
         /**
          *  Creates an instance of the camera source.
          */
-        public Camera2Controller build() {
+        public CameraControl_B build() {
 
-            cameraController.frameProcessor = new Camera2Runnable(detector, cameraController);
+            cameraController.frameProcessor = new CameraThread_B(detector, cameraController);
 
             return cameraController;
         }

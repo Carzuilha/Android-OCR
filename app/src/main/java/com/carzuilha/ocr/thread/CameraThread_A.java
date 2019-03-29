@@ -6,7 +6,7 @@ import android.hardware.Camera;
 import android.os.SystemClock;
 import android.util.Log;
 
-import com.carzuilha.ocr.control.Camera1Controller;
+import com.carzuilha.ocr.control.CameraControl_A;
 import com.google.android.gms.vision.Detector;
 import com.google.android.gms.vision.Frame;
 
@@ -18,25 +18,13 @@ import java.nio.ByteBuffer;
  * (i.e., without unnecessary context switching or waiting on the next frame).
  */
 @SuppressWarnings("deprecation")
-public class Camera1Runnable implements Runnable {
+public class CameraThread_A extends CameraThread implements Runnable {
 
     //  Defines the tag of the class.
-    private static final String TAG = "Camera1Runnable";
-
-    private long startTimeMillis = SystemClock.elapsedRealtime();
-    private Detector<?> detector;
-
-    //  This lock guards all of the member variables below.
-    private boolean active = true;
-    private final Object lock = new Object();
-
-    //  These pending variables hold the state associated with the new frame awaiting processing.
-    private int pendingFrameId = 0;
-    private long pendingTimeMillis;
-    private ByteBuffer pendingFrameData;
+    private static final String TAG = "CameraThread_A";
 
     //  The camera source, which the thread will run.
-    private Camera1Controller camera1Controller;
+    private CameraControl_A cameraControllerA;
 
     //==============================================================================================
     //                                  Default methods
@@ -48,9 +36,9 @@ public class Camera1Runnable implements Runnable {
      * @param   _detector               The OCR detector.
      * @param   _cameraController       Controller of the camera device.
      */
-    public Camera1Runnable(Detector<?> _detector, Camera1Controller _cameraController) {
+    public CameraThread_A(Detector<?> _detector, CameraControl_A _cameraController) {
         detector = _detector;
-        camera1Controller = _cameraController;
+        cameraControllerA = _cameraController;
     }
 
     /**
@@ -83,7 +71,7 @@ public class Camera1Runnable implements Runnable {
                 pendingFrameData = null;
             }
 
-            if (!camera1Controller.getBytesToByteBuffer().containsKey(_data)) {
+            if (!cameraControllerA.getBytesToByteBuffer().containsKey(_data)) {
                 Log.d(TAG,
                         "Skipping frame. Could not find ByteBuffer associated with the image " +
                                 "data from the com.project.util.");
@@ -94,7 +82,7 @@ public class Camera1Runnable implements Runnable {
             // idea of the timing of frames received and when frames were dropped along the way.
             pendingTimeMillis = SystemClock.elapsedRealtime() - startTimeMillis;
             pendingFrameId++;
-            pendingFrameData = camera1Controller.getBytesToByteBuffer().get(_data);
+            pendingFrameData = cameraControllerA.getBytesToByteBuffer().get(_data);
 
             //  Notify the processor thread if it is waiting on the next frame (see below).
             lock.notifyAll();
@@ -108,7 +96,7 @@ public class Camera1Runnable implements Runnable {
     @SuppressLint("Assert")
     public void release() {
 
-        assert (camera1Controller.getProcessingThread().getState() == Thread.State.TERMINATED);
+        assert (cameraControllerA.getProcessingThread().getState() == Thread.State.TERMINATED);
 
         detector.release();
         detector = null;
@@ -152,11 +140,11 @@ public class Camera1Runnable implements Runnable {
                 outputFrame = new Frame.Builder()
                         .setImageData(
                                 pendingFrameData,
-                                camera1Controller.getPreviewSize().getWidth(),
-                                camera1Controller.getPreviewSize().getHeight(), ImageFormat.NV21)
+                                cameraControllerA.getPreviewSize().getWidth(),
+                                cameraControllerA.getPreviewSize().getHeight(), ImageFormat.NV21)
                         .setId(pendingFrameId)
                         .setTimestampMillis(pendingTimeMillis)
-                        .setRotation(camera1Controller.getRotation())
+                        .setRotation(cameraControllerA.getRotation())
                         .build();
 
                 data = pendingFrameData;
@@ -174,7 +162,7 @@ public class Camera1Runnable implements Runnable {
             } catch (Throwable t) {
                 Log.e(TAG, "Exception thrown from receiver.", t);
             } finally {
-                camera1Controller.getCamera().addCallbackBuffer(data.array());
+                cameraControllerA.getCamera().addCallbackBuffer(data.array());
             }
         }
     }

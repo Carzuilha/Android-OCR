@@ -20,8 +20,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Toast;
 
-import com.carzuilha.ocr.control.Camera2Controller;
-import com.carzuilha.ocr.control.Camera1Controller;
+import com.carzuilha.ocr.control.CameraControl_A;
+import com.carzuilha.ocr.control.CameraControl_B;
 import com.carzuilha.ocr.view.OcrTextBlock;
 import com.carzuilha.ocr.view.OcrGraphic;
 import com.carzuilha.ocr.R;
@@ -48,8 +48,8 @@ public final class MainActivity extends AppCompatActivity {
     private static final int RC_HANDLE_CAMERA_PERM = 2;
 
     //  Component elements.
-    private Camera1Controller camera1Controller = null;
-    private Camera2Controller camera2Controller = null;
+    private CameraControl_A cameraControllerA = null;
+    private CameraControl_B camera2Controller = null;
     private CameraViewGroup cameraViewGroup;
     private GraphicView<OcrGraphic> graphicOverlay;
 
@@ -249,19 +249,19 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         if (USE_LEGACY_CAMERA) {
-            camera1Controller =
-                    new Camera1Controller.Builder(getApplicationContext(), textRecognizer)
+            cameraControllerA =
+                    new CameraControl_A.Builder(getApplicationContext(), textRecognizer)
                             .previewSize(1280, 720)
-                            .camera(Camera1Controller.CAMERA_FACING_BACK)
+                            .camera(CameraControl_A.CAMERA_FACING_BACK)
                             .focus(Camera.Parameters.FOCUS_MODE_AUTO)
                             .build();
         }
         else {
             camera2Controller =
-                    new Camera2Controller.Builder(getApplicationContext(), textRecognizer)
+                    new CameraControl_B.Builder(getApplicationContext(), textRecognizer)
                             .previewSize(1280, 720)
-                            .camera(Camera2Controller.CAMERA_FACING_BACK)
-                            .focus(Camera2Controller.CAMERA_AF_AUTO)
+                            .camera(CameraControl_B.CAMERA_FACING_BACK)
+                            .focus(CameraControl_B.CAMERA_AF_AUTO)
                             .build();
         }
 
@@ -286,16 +286,16 @@ public final class MainActivity extends AppCompatActivity {
 
         if (USE_LEGACY_CAMERA) {
 
-            if (camera1Controller != null) {
+            if (cameraControllerA != null) {
 
                 try {
 
-                    cameraViewGroup.start(camera1Controller, graphicOverlay);
+                    cameraViewGroup.start(cameraControllerA, graphicOverlay);
 
                 } catch (IOException e) {
 
-                    camera1Controller.release();
-                    camera1Controller = null;
+                    cameraControllerA.release();
+                    cameraControllerA = null;
                 }
             }
         }
