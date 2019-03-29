@@ -23,7 +23,7 @@ public class Camera1Runnable implements Runnable {
     //  Defines the tag of the class.
     private static final String TAG = "Camera1Runnable";
 
-    private long mStartTimeMillis = SystemClock.elapsedRealtime();
+    private long startTimeMillis = SystemClock.elapsedRealtime();
     private Detector<?> detector;
 
     //  This lock guards all of the member variables below.
@@ -38,26 +38,25 @@ public class Camera1Runnable implements Runnable {
     //  The camera source, which the thread will run.
     private Camera1Controller camera1Controller;
 
+    //==============================================================================================
+    //                                  Default methods
+    //==============================================================================================
+
+    /**
+     *  Creates a new thread instance.
+     *
+     * @param   _detector               The OCR detector.
+     * @param   _cameraController       Controller of the camera device.
+     */
     public Camera1Runnable(Detector<?> _detector, Camera1Controller _cameraController) {
         detector = _detector;
         camera1Controller = _cameraController;
     }
 
     /**
-     *  Releases the underlying receiver. This is only safe to do after the associated thread
-     * has completed, which is managed in frame source's release method above.
-     */
-    @SuppressLint("Assert")
-    public void release() {
-
-        assert (camera1Controller.getProcessingThread().getState() == Thread.State.TERMINATED);
-
-        detector.release();
-        detector = null;
-    }
-
-    /**
      *  Marks the runnable as active/not active. Signals any blocked threads to continue.
+     *
+     * @param   _active         Indicates if the thread must be active or not.
      */
     public void setActive(boolean _active) {
 
@@ -71,6 +70,9 @@ public class Camera1Runnable implements Runnable {
      *  Sets the frame data received from the camera. This adds the previous unused frame buffer
      * (if present) back to the application, and keeps a pending reference to the frame data for
      * future use.
+     *
+     * @param   _data           The buffer data.
+     * @param   _camera         The camera being utilized.
      */
     public void setNextFrame(byte[] _data, Camera _camera) {
 
@@ -90,7 +92,7 @@ public class Camera1Runnable implements Runnable {
 
             //  Timestamp and frame ID are maintained here, which will give downstream code some
             // idea of the timing of frames received and when frames were dropped along the way.
-            pendingTimeMillis = SystemClock.elapsedRealtime() - mStartTimeMillis;
+            pendingTimeMillis = SystemClock.elapsedRealtime() - startTimeMillis;
             pendingFrameId++;
             pendingFrameData = camera1Controller.getBytesToByteBuffer().get(_data);
 
@@ -98,6 +100,23 @@ public class Camera1Runnable implements Runnable {
             lock.notifyAll();
         }
     }
+
+    /**
+     *  Releases the underlying receiver. This is only safe to do after the associated thread
+     * has completed, which is managed in frame source's release method above.
+     */
+    @SuppressLint("Assert")
+    public void release() {
+
+        assert (camera1Controller.getProcessingThread().getState() == Thread.State.TERMINATED);
+
+        detector.release();
+        detector = null;
+    }
+
+    //==============================================================================================
+    //                                  Running the thread
+    //==============================================================================================
 
     /**
      *  As long as the processing thread is active, this executes detection on frames
@@ -150,7 +169,6 @@ public class Camera1Runnable implements Runnable {
             // The code below needs to run outside of synchronization, because this will allow
             // the camera to add pending frame(s) while we are running detection on the current
             // frame.
-
             try {
                 detector.receiveFrame(outputFrame);
             } catch (Throwable t) {
@@ -160,4 +178,5 @@ public class Camera1Runnable implements Runnable {
             }
         }
     }
+
 }

@@ -6,6 +6,7 @@ import android.content.Context;
 import android.graphics.ImageFormat;
 import android.hardware.Camera;
 import android.hardware.Camera.CameraInfo;
+import android.support.annotation.NonNull;
 import android.support.annotation.RequiresPermission;
 import android.support.annotation.StringDef;
 import android.util.Log;
@@ -32,24 +33,10 @@ import java.util.Map;
  * Google Play Services 8.1 or higher, due to using indirect byte buffers for storing images.
  */
 @SuppressWarnings("deprecation")
-public class Camera1Controller {
+public class Camera1Controller extends CameraController {
 
     //  Defines the tag of the class.
     public static final String TAG = "Camera1Controller";
-
-    //  Defines the camera type.
-    @SuppressLint("InlinedApi")
-    public static final int CAMERA_FACING_BACK = 0;
-    @SuppressLint("InlinedApi")
-    public static final int CAMERA_FACING_FRONT = 1;
-
-    //  If the absolute difference between a preview size aspect ratio and a picture size aspect
-    // ratio is less than this tolerance, they are considered to be the same aspect ratio.
-    private static final float ASPECT_RATIO_TOLERANCE = 0.01f;
-
-    //  Defines the camera FPS. It is possible to let the user changes the value, but (for now) I
-    // found it to unstable.
-    private static final float REQUESTED_FPS = 30.0f;
 
     //  Defines all the focus modes from a camera.
     @StringDef({
@@ -79,9 +66,6 @@ public class Camera1Controller {
     // camera close, but not exactly the same values for these.
     private int maxPreviewWidth = 1024;
     private int maxPreviewHeight = 768;
-
-    //  Defines the default camera.
-    private int selectedCamera = CAMERA_FACING_BACK;
 
     //  Rotation of the device, and thus the associated preview images captured from the device.
     private int rotation;
@@ -257,11 +241,9 @@ public class Camera1Controller {
      * surface holder is used for the preview so frames can be displayed to the user.
      *
      * @param   _dynamicTextureView     The surface holder to use for the preview frames
-     * @throws  IOException             If the supplied surface holder could not be used as the preview
-     *                                  display.
      */
     @RequiresPermission(Manifest.permission.CAMERA)
-    public void start(DynamicTextureView _dynamicTextureView) throws IOException {
+    public void start(@NonNull DynamicTextureView _dynamicTextureView) {
 
         synchronized (cameraLock) {
 
@@ -269,12 +251,19 @@ public class Camera1Controller {
 
             initializeCamera();
 
-            camera.setPreviewTexture(_dynamicTextureView.getSurfaceTexture());
-            camera.startPreview();
+            try {
 
-            processingThread = new Thread(frameProcessor);
-            frameProcessor.setActive(true);
-            processingThread.start();
+                camera.setPreviewTexture(_dynamicTextureView.getSurfaceTexture());
+                camera.startPreview();
+
+                processingThread = new Thread(frameProcessor);
+                frameProcessor.setActive(true);
+                processingThread.start();
+
+            } catch (Exception e) {
+                Log.d(TAG, "Start exception: " + e);
+                e.printStackTrace();
+            }
         }
     }
 
@@ -293,8 +282,9 @@ public class Camera1Controller {
 
                 try {
                     processingThread.join();
-                } catch (InterruptedException e) {
-                    Log.d(TAG, "Frame processing thread interrupted on release.");
+                } catch (Exception e) {
+                    Log.d(TAG, "Interrupted exception: " + e);
+                    e.printStackTrace();
                 }
 
                 processingThread = null;
@@ -310,7 +300,8 @@ public class Camera1Controller {
                 try {
                     camera.setPreviewTexture(null);
                 } catch (Exception e) {
-                    Log.e(TAG, "Failed to clear camera preview: " + e);
+                    Log.d(TAG, "Clear camera preview exception: " + e);
+                    e.printStackTrace();
                 }
 
                 camera.release();
@@ -330,7 +321,7 @@ public class Camera1Controller {
     }
 
     //==============================================================================================
-    //                                  Execution methods
+    //                                  Internal methods
     //==============================================================================================
 
     /**
@@ -555,7 +546,7 @@ public class Camera1Controller {
     }
 
     //==============================================================================================
-    //                              Callbacks/Static classes
+    //                                      Inner classes
     //==============================================================================================
 
     /**
@@ -570,7 +561,7 @@ public class Camera1Controller {
     }
 
     //==============================================================================================
-    //                                  Camera builder
+    //                                      Camera builder
     //==============================================================================================
 
     /**
@@ -672,4 +663,5 @@ public class Camera1Controller {
             return cameraController;
         }
     }
+
 }

@@ -35,11 +35,15 @@ public class CameraViewGroup extends ViewGroup {
     private Camera1Controller camera1Controller = null;
     private Camera2Controller camera2Controller = null;
 
+    //==============================================================================================
+    //                                  Default methods
+    //==============================================================================================
+
     /**
-     *  Initializes the CameraViewGroup detector and sets its parameters.
+     *  Initializes the CameraViewGroup and sets its parameters.
      *
-     * @param   _context    The context to be utilized.
-     * @param   _attrs      A set of attributes to be used with the context.
+     * @param   _context        The context to be utilized.
+     * @param   _attrs          A set of attributes to be used with the context.
      */
     public CameraViewGroup(Context _context, AttributeSet _attrs) {
 
@@ -57,9 +61,9 @@ public class CameraViewGroup extends ViewGroup {
     /**
      *  Called when the application starts.
      *
-     * @param   _camera1Controller   The camera source to be utilized as OCR reference.
-     * @throws  IOException         If there is any problem with the camera execution.
-     * @throws  SecurityException   If the access for the camera is blocked.
+     * @param   _camera1Controller      The camera source to be utilized as OCR reference.
+     * @throws  IOException             If there is any problem with the camera execution.
+     * @throws  SecurityException       If the access for the camera is blocked.
      */
     @RequiresPermission(Manifest.permission.CAMERA)
     public void start(Camera1Controller _camera1Controller) throws IOException, SecurityException {
@@ -150,6 +154,10 @@ public class CameraViewGroup extends ViewGroup {
         }
     }
 
+    //==============================================================================================
+    //                                  Internal methods
+    //==============================================================================================
+
     /**
      *  Starts the component if all are ready.
      *
@@ -204,6 +212,25 @@ public class CameraViewGroup extends ViewGroup {
 
             startRequested = false;
         }
+    }
+
+    /**
+     *  Returns if the device is in portrait mode.
+     *
+     * @return      'true' if in portrait mode, 'false' otherwise.
+     */
+    private boolean isPortraitMode() {
+
+        int orientation = context.getResources().getConfiguration().orientation;
+
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            return false;
+        }
+        if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -278,24 +305,9 @@ public class CameraViewGroup extends ViewGroup {
         }
     }
 
-    /**
-     *  Returns if the device is in portrait mode.
-     *
-     * @return      'true' if in portrait mode, 'false' otherwise.
-     */
-    private boolean isPortraitMode() {
-
-        int orientation = context.getResources().getConfiguration().orientation;
-
-        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            return false;
-        }
-        if (orientation == Configuration.ORIENTATION_PORTRAIT) {
-            return true;
-        }
-
-        return false;
-    }
+    //==============================================================================================
+    //                                      Inner classes
+    //==============================================================================================
 
     /**
      *  Defines a custom callback for the component.
@@ -332,4 +344,5 @@ public class CameraViewGroup extends ViewGroup {
 
         }
     }
+
 }

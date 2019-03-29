@@ -7,7 +7,7 @@ import com.google.android.gms.vision.Detector;
 import com.google.android.gms.vision.text.TextBlock;
 
 /**
- *  A very simple Processor which gets detected TextBlocks and adds them to the graphicView as
+ *  A very simple processor which gets detected TextBlocks and adds them to the GraphicView as
  * OcrGraphics.
  */
 public class OcrTextBlock implements Detector.Processor<TextBlock> {
@@ -17,6 +17,10 @@ public class OcrTextBlock implements Detector.Processor<TextBlock> {
 
     //  The graphics utilized to draw the text.
     private GraphicView<OcrGraphic> graphicOverlay;
+
+    //==============================================================================================
+    //                                  Default methods
+    //==============================================================================================
 
     /**
      *  Initializes the OCR detector and sets its parameters.
@@ -30,14 +34,14 @@ public class OcrTextBlock implements Detector.Processor<TextBlock> {
     /**
      *  Called by the detector to deliver detection results.
      *
-     * @param   detections          The received detections.
+     * @param   _detections         The received _detections.
      */
     @Override
-    public void receiveDetections(Detector.Detections<TextBlock> detections) {
+    public void receiveDetections(Detector.Detections<TextBlock> _detections) {
 
         graphicOverlay.clear();
 
-        SparseArray<TextBlock> items = detections.getDetectedItems();
+        SparseArray<TextBlock> items = _detections.getDetectedItems();
 
         for (int i = 0; i < items.size(); ++i) {
 

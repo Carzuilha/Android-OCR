@@ -35,7 +35,7 @@ import java.io.IOException;
 
 /**
  *  Main activity of the application. This app detects text and displays the value. During detection
- *  overlay, graphics are drawn to indicate the position, size, and contents of each TextBlock.
+ * overlay, graphics are drawn to indicate the position, size, and contents of each TextBlock.
  */
 public final class MainActivity extends AppCompatActivity {
 
@@ -52,6 +52,10 @@ public final class MainActivity extends AppCompatActivity {
     private Camera2Controller camera2Controller = null;
     private CameraViewGroup cameraViewGroup;
     private GraphicView<OcrGraphic> graphicOverlay;
+
+    //==============================================================================================
+    //                                  Initializing activity
+    //==============================================================================================
 
     /**
      *  Initializes the UI and creates the detector pipeline.
@@ -88,10 +92,63 @@ public final class MainActivity extends AppCompatActivity {
         int result = ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA);
 
         if (result == PackageManager.PERMISSION_GRANTED) {
-            createCameraSource();
+            createCamera();
         } else {
             requestCameraPermission();
         }
+    }
+
+    //==============================================================================================
+    //                                  Activity events
+    //==============================================================================================
+
+    /**
+     *  Callback for the result from requesting permissions. This method
+     * is invoked for every call on requestPermissions().
+     *
+     * @param   requestCode     The request code passed in requestPermissions().
+     * @param   permissions     The requested permissions. Never null.
+     * @param   grantResults    The grant results for the corresponding permissions
+     *                          which is either PERMISSION_GRANTED or PERMISSION_DENIED. Never null.
+     */
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+
+        if (requestCode != RC_HANDLE_CAMERA_PERM) {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+            return;
+        }
+
+        if (grantResults.length != 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            createCamera();
+            return;
+        }
+
+        DialogInterface.OnClickListener listener =
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int id) {
+                        finish();
+                    }
+                };
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+
+        builder.setTitle(R.string.app_name);
+        builder.setMessage(R.string.no_camera_permission);
+        builder.setPositiveButton(R.string.ok, listener);
+
+        builder.show();
+    }
+
+    /**
+     *  Defines an event that happens when the device screen is touched.
+     *
+     * @param   e       The motion event?
+     * @return          'true' if an event were interpreted, 'false' otherwise.
+     */
+    @Override
+    public boolean onTouchEvent(MotionEvent e) {
+        return super.onTouchEvent(e);
     }
 
     /**
@@ -103,7 +160,7 @@ public final class MainActivity extends AppCompatActivity {
 
         super.onResume();
 
-        startCameraSource();
+        startCamera();
     }
 
     /**
@@ -135,54 +192,9 @@ public final class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     *  Defines an event that happens when the device screen is touched.
-     *
-     * @param   e       The motion event?
-     * @return          'true' if an event were interpreted, 'false' otherwise.
-     */
-    @Override
-    public boolean onTouchEvent(MotionEvent e) {
-        return super.onTouchEvent(e);
-    }
-
-    /**
-     *  Callback for the result from requesting permissions. This method
-     * is invoked for every call on requestPermissions().
-     *
-     * @param   requestCode     The request code passed in requestPermissions().
-     * @param   permissions     The requested permissions. Never null.
-     * @param   grantResults    The grant results for the corresponding permissions
-     *                          which is either PERMISSION_GRANTED or PERMISSION_DENIED. Never null.
-     */
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-
-        if (requestCode != RC_HANDLE_CAMERA_PERM) {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-            return;
-        }
-
-        if (grantResults.length != 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            createCameraSource();
-            return;
-        }
-
-        DialogInterface.OnClickListener listener =
-                new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int id) {
-                        finish();
-                    }
-                };
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-
-        builder.setTitle(R.string.app_name);
-        builder.setMessage(R.string.no_camera_permission);
-        builder.setPositiveButton(R.string.ok, listener);
-
-        builder.show();
-    }
+    //==============================================================================================
+    //                                  Internal methods
+    //==============================================================================================
 
     /**
      *  Requests the camera permission.
@@ -219,7 +231,7 @@ public final class MainActivity extends AppCompatActivity {
      *
      */
     @SuppressLint("InlinedApi")
-    private void createCameraSource() {
+    private void createCamera() {
 
         Context context = getApplicationContext();
         TextRecognizer textRecognizer = new TextRecognizer.Builder(context).build();
@@ -262,7 +274,7 @@ public final class MainActivity extends AppCompatActivity {
      *
      * @throws  SecurityException       if the camera access is denied.
      */
-    private void startCameraSource() throws SecurityException {
+    private void startCamera() throws SecurityException {
 
         int code = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getApplicationContext());
 

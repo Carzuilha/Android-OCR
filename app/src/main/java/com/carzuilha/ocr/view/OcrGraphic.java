@@ -26,6 +26,10 @@ public class OcrGraphic extends Graphic {
     private static Paint textPaint;
     private final TextBlock textBlock;
 
+    //==============================================================================================
+    //                                  Default methods
+    //==============================================================================================
+
     /**
      *  Initializes the OCR graphic and sets its parameters.
      *
@@ -60,6 +64,73 @@ public class OcrGraphic extends Graphic {
     }
 
     /**
+     *  Checks whether a point is within the bounding box of this graphic. The provided point should
+     * be relative to this graphic's containing graphic.
+     *
+     * @param   _x          An x parameter in the relative context of the canvas.
+     * @param   _y          A y parameter in the relative context of the canvas.
+     * @return              'true' if the provided point is contained within this graphic's
+     *                      bounding box; 'false' otherwise.
+     */
+    public boolean contains(float _x, float _y) {
+
+        if (textBlock == null) return false;
+
+        RectF rect = new RectF(textBlock.getBoundingBox());
+        rect = translateRect(rect);
+
+        return rect.contains(_x, _y);
+    }
+
+    /**
+     *  Adjusts a horizontal value of the supplied value from the preview scale to the view
+     * scale.
+     *
+     * @param   _horizontal     The reference value.
+     * @return                  The adjusted value from the reference.
+     */
+    public float scaleX(float _horizontal) {
+        return _horizontal * graphicView.getWidthScaleFactor();
+    }
+
+    /**
+     *  Adjusts a vertical value of the supplied value from the preview scale to the view
+     * scale.
+     *
+     * @param   _vertical       The reference value.
+     * @return                  The adjusted value from the reference.
+     */
+    public float scaleY(float _vertical) {
+        return _vertical * graphicView.getHeightScaleFactor();
+    }
+
+    /**
+     *  Adjusts the x coordinate from the preview's coordinate system to the view coordinate
+     * system.
+     *
+     * @param   _x          The translation value.
+     * @return              The new x coordinate of the graphic.
+     */
+    public float translateX(float _x) {
+        if (graphicView.getCameraType() == CameraSource.CAMERA_FACING_FRONT) {
+            return graphicView.getWidth() - scaleX(_x);
+        } else {
+            return scaleX(_x);
+        }
+    }
+
+    /**
+     *  Adjusts the y coordinate from the preview's coordinate system to the view coordinate
+     * system.
+     *
+     * @param   _y          The translation value.
+     * @return              The new y coordinate of the graphic.
+     */
+    public float translateY(float _y) {
+        return scaleY(_y);
+    }
+
+    /**
      *  Draws the text block annotations for position, size, and raw value on the supplied canvas.
      *
      * @param   _canvas      The drawing canvas.
@@ -83,60 +154,6 @@ public class OcrGraphic extends Graphic {
 
             _canvas.drawText(currentText.getValue(), left, bottom, textPaint);
         }
-    }
-
-    /**
-     *  Checks whether a point is within the bounding box of this graphic. The provided point should
-     * be relative to this graphic's containing graphicView.
-     *
-     * @param   _x          An x parameter in the relative context of the canvas.
-     * @param   _y          A y parameter in the relative context of the canvas.
-     * @return              'true' if the provided point is contained within this graphic's
-     *                      bounding box; 'false' otherwise.
-     */
-    public boolean contains(float _x, float _y) {
-
-        if (textBlock == null) return false;
-
-        RectF rect = new RectF(textBlock.getBoundingBox());
-        rect = translateRect(rect);
-
-        return rect.contains(_x, _y);
-    }
-
-    /**
-     *  Adjusts a horizontal value of the supplied value from the preview scale to the view
-     * scale.
-     */
-    public float scaleX(float _horizontal) {
-        return _horizontal * graphicView.getWidthScaleFactor();
-    }
-
-    /**
-     *  Adjusts a vertical value of the supplied value from the preview scale to the view scale.
-     */
-    public float scaleY(float _vertical) {
-        return _vertical * graphicView.getHeightScaleFactor();
-    }
-
-    /**
-     *  Adjusts the x coordinate from the preview's coordinate system to the view coordinate
-     * system.
-     */
-    public float translateX(float _x) {
-        if (graphicView.getCameraType() == CameraSource.CAMERA_FACING_FRONT) {
-            return graphicView.getWidth() - scaleX(_x);
-        } else {
-            return scaleX(_x);
-        }
-    }
-
-    /**
-     *  Adjusts the y coordinate from the preview's coordinate system to the view coordinate
-     * system.
-     */
-    public float translateY(float _y) {
-        return scaleY(_y);
     }
 
 }

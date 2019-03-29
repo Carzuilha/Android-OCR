@@ -6,6 +6,7 @@ import android.os.SystemClock;
 import android.util.Log;
 
 import com.carzuilha.ocr.control.Camera2Controller;
+import com.carzuilha.ocr.util.NV21Image;
 import com.google.android.gms.vision.Detector;
 import com.google.android.gms.vision.Frame;
 
@@ -21,7 +22,7 @@ public class Camera2Runnable implements Runnable {
     //  Defines the tag of the class.
     private static final String TAG = "Camera2Runnable";
 
-    private long mStartTimeMillis = SystemClock.elapsedRealtime();
+    private long startTimeMillis = SystemClock.elapsedRealtime();
     private Detector<?> detector;
 
     //  This lock guards all of the member variables below.
@@ -36,9 +37,59 @@ public class Camera2Runnable implements Runnable {
     //  The camera source, which the thread will run.
     private Camera2Controller camera2Controller;
 
+    //==============================================================================================
+    //                                  Default methods
+    //==============================================================================================
+
+    /**
+     *  Creates a new thread instance.
+     *
+     * @param   _detector               The OCR detector.
+     * @param   _cameraController       Controller of the camera device.
+     */
+
     public Camera2Runnable(Detector<?> _detector, Camera2Controller _cameraController) {
         detector = _detector;
         camera2Controller = _cameraController;
+    }
+
+    /**
+     *  Marks the runnable as active/not active. Signals any blocked threads to continue.
+     *
+     * @param   _active         Indicates if the thread must be active or not.
+     */
+    public void setActive(boolean _active) {
+
+        synchronized (lock) {
+            this.active = _active;
+            lock.notifyAll();
+        }
+    }
+
+    /**
+     *  Sets the frame data received from the camera. This adds the previous unused frame buffer
+     * (if present) back to the application, and keeps a pending reference to the frame data for
+     * future use.
+     *
+     * @param   _data           The buffer data.
+     */
+    public void setNextFrame(byte[] _data) {
+
+        synchronized (lock) {
+
+            if (pendingFrameData != null) {
+                pendingFrameData = null;
+            }
+
+            // Timestamp and frame ID are maintained here, which will give downstream code some
+            // idea of the timing of frames received and when frames were dropped along the way.
+            pendingTimeMillis = SystemClock.elapsedRealtime() - startTimeMillis;
+            pendingFrameId++;
+            pendingFrameData = ByteBuffer.wrap(_data);
+
+            // Notify the processor thread if it is waiting on the next frame (see below).
+            lock.notifyAll();
+        }
     }
 
     /**
@@ -54,40 +105,9 @@ public class Camera2Runnable implements Runnable {
         detector = null;
     }
 
-    /**
-     * Marks the runnable as active/not active.  Signals any blocked threads to continue.
-     */
-    public void setActive(boolean active) {
-
-        synchronized (lock) {
-            this.active = active;
-            lock.notifyAll();
-        }
-    }
-
-    /**
-     *  Sets the frame data received from the camera. This adds the previous unused frame buffer
-     * (if present) back to the application, and keeps a pending reference to the frame data for
-     * future use.
-     */
-    public void setNextFrame(byte[] data) {
-
-        synchronized (lock) {
-
-            if (pendingFrameData != null) {
-                pendingFrameData = null;
-            }
-
-            // Timestamp and frame ID are maintained here, which will give downstream code some
-            // idea of the timing of frames received and when frames were dropped along the way.
-            pendingTimeMillis = SystemClock.elapsedRealtime() - mStartTimeMillis;
-            pendingFrameId++;
-            pendingFrameData = ByteBuffer.wrap(data);
-
-            // Notify the processor thread if it is waiting on the next frame (see below).
-            lock.notifyAll();
-        }
-    }
+    //==============================================================================================
+    //                                  Running the thread
+    //==============================================================================================
 
     /**
      *  As long as the processing thread is active, this executes detection on frames
@@ -122,11 +142,11 @@ public class Camera2Runnable implements Runnable {
                 outputFrame = new Frame.Builder()
                         .setImageData(
                                 ByteBuffer.wrap(
-                                        camera2Controller.quarterNV21(
+                                    NV21Image.quarter(
                                         pendingFrameData.array(),
                                         camera2Controller.getPreviewSize().getWidth(),
                                         camera2Controller.getPreviewSize().getHeight())
-                                ),
+                                    ),
                                 camera2Controller.getPreviewSize().getWidth()/4,
                                 camera2Controller.getPreviewSize().getHeight()/4,
                                 ImageFormat.NV21)
@@ -143,7 +163,6 @@ public class Camera2Runnable implements Runnable {
             // The code below needs to run outside of synchronization, because this will allow
             // the camera to add pending frame(s) while we are running detection on the current
             // frame.
-
             try {
                 detector.receiveFrame(outputFrame);
             } catch (Throwable t) {
@@ -151,4 +170,5 @@ public class Camera2Runnable implements Runnable {
             }
         }
     }
+
 }
