@@ -39,7 +39,7 @@ import java.io.IOException;
  */
 public final class MainActivity extends AppCompatActivity {
 
-    public static boolean USE_LEGACY_CAMERA = true;
+    public static boolean USE_LEGACY_CAMERA = false;
 
     //  Intent request code to handle updating play services if needed.
     private static final int RC_HANDLE_GMS = 9001;

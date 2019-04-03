@@ -7,6 +7,7 @@ import android.os.SystemClock;
 import android.util.Log;
 
 import com.carzuilha.ocr.control.CameraControl_A;
+import com.carzuilha.ocr.util.NV21Image;
 import com.google.android.gms.vision.Detector;
 import com.google.android.gms.vision.Frame;
 
@@ -117,6 +118,7 @@ public class CameraThread_A extends CameraThread implements Runnable {
     public void run() {
 
         Frame outputFrame;
+        byte[] bufferedFrame;
         ByteBuffer data;
 
         while (true) {
@@ -137,11 +139,17 @@ public class CameraThread_A extends CameraThread implements Runnable {
 
                 if (!active) return;
 
+                bufferedFrame = NV21Image.quarter(
+                        pendingFrameData.array(),
+                        cameraControlA.getPreviewSize().getWidth(),
+                        cameraControlA.getPreviewSize().getHeight());
+
                 outputFrame = new Frame.Builder()
                         .setImageData(
-                                pendingFrameData,
-                                cameraControlA.getPreviewSize().getWidth(),
-                                cameraControlA.getPreviewSize().getHeight(), ImageFormat.NV21)
+                                ByteBuffer.wrap(bufferedFrame),
+                                cameraControlA.getPreviewSize().getWidth() / 4,
+                                cameraControlA.getPreviewSize().getHeight() / 4,
+                                ImageFormat.NV21)
                         .setId(pendingFrameId)
                         .setTimestampMillis(pendingTimeMillis)
                         .setRotation(cameraControlA.getRotation())

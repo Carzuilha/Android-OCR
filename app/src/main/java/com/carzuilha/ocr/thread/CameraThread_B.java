@@ -107,6 +107,7 @@ public class CameraThread_B extends CameraThread implements Runnable {
     public void run() {
 
         Frame outputFrame;
+        byte[] bufferedFrame;
 
         while (true) {
 
@@ -126,11 +127,17 @@ public class CameraThread_B extends CameraThread implements Runnable {
 
                 if (!active) return;
 
+                bufferedFrame = NV21Image.quarter(
+                        pendingFrameData.array(),
+                        cameraControlB.getPreviewSize().getWidth(),
+                        cameraControlB.getPreviewSize().getHeight());
+
                 outputFrame = new Frame.Builder()
                         .setImageData(
-                                pendingFrameData,
-                                cameraControlB.getPreviewSize().getWidth(),
-                                cameraControlB.getPreviewSize().getHeight(), ImageFormat.NV21)
+                                ByteBuffer.wrap(bufferedFrame),
+                                cameraControlB.getPreviewSize().getWidth() / 4,
+                                cameraControlB.getPreviewSize().getHeight() / 4,
+                                ImageFormat.NV21)
                         .setId(pendingFrameId)
                         .setTimestampMillis(pendingTimeMillis)
                         .setRotation(cameraControlB.getDetectorOrientation())
