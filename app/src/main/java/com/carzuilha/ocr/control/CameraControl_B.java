@@ -565,7 +565,7 @@ public class CameraControl_B extends CameraControl {
     }
 
     /**
-     *  TODO: Selects the most suitable preview frames per second range, given the desired frames per second.
+     *  Selects the most suitable preview frames per second range, given the desired frames per second.
      *
      * @param   _cameraCharacteristics      The camera characteristics.
      * @return                              The selected preview frames per second range.
@@ -581,7 +581,7 @@ public class CameraControl_B extends CameraControl {
         // that the desired value is outside of, but this is often preferred. For example, if the
         // desired frame rate is 29.97, the range (30, 30) is probably more desirable than the
         // range (15, 30).
-        Range selectedFpsRange = null;
+        Range<Integer> selectedFpsRange = null;
         int minDiff = Integer.MAX_VALUE;
 
         Range<Integer>[] previewFpsRangeList = _cameraCharacteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
@@ -691,7 +691,7 @@ public class CameraControl_B extends CameraControl {
 
             List<?> entries = (List) entry.getValue();
 
-            for (int i = 0; i<entries.size(); i++) {
+            for (int i = 0; i < entries.size(); i++) {
 
                 android.util.Size s = (android.util.Size) entries.get(i);
 
