@@ -6,19 +6,19 @@ This project shows the example of an Android app for Optical Character Recogniti
 
 Currently, this project is based on two other projects:
 
- - [Google Vision](https://developers.google.com/vision/);
- - [EzequielAdrianM's Camera2Vision](https://github.com/EzequielAdrianM/Camera2Vision).
+ - The [Google Vision](https://developers.google.com/vision/) project;
+ - EzequielAdrianM's [Camera2Vision](https://github.com/EzequielAdrianM/Camera2Vision) project.
 
-These two projects were combined in this work. The decision to do this approach is based on the fact that the Google project utilizes the original [Camera](https://developer.android.com/reference/android/hardware/Camera.html) library (deprecated since API 21), while the Ezequiel's project utilizes the most recent [Camera2](https://developer.android.com/reference/android/hardware/camera2/package-summary), currently utilized as default in new projects.
+These two projects were combined in this work. The decision to do this approach is based on the fact that the Google project uses the original [Camera](https://developer.android.com/reference/android/hardware/Camera.html) library (deprecated since API 21), while the Ezequiel's project uses the most recent [Camera2](https://developer.android.com/reference/android/hardware/camera2/package-summary), currently used as default in new projects.
 
 ## Utilized Material
 
  - [**Android Studio IDE**](https://developer.android.com/studio/);
- - A _smartphone_/_tablet_ on Android (API 21 or above).
+ - A _smartphone_/_tablet_ with Android (API 21 or above).
 
 ## Usage of the Project Sources
 
-you may use the sources of this project as follows: 
+You may use the sources of this project as follows: 
 
  - The [CameraControl_A.java](app/src/main/java/com/carzuilha/ocr/control/CameraControl_A.java) class utilizes the original `camera`;
  - The [CameraControl_B.java](app/src/main/java/com/carzuilha/ocr/controlCameraControl_B.java) class utilizes the recent `camera2`.

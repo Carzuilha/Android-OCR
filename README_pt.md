@@ -6,8 +6,8 @@ Este projeto exibe um exemplo de aplicativo em Android para o Reconhecimento Ót
 
 Atualmente, este projeto é baseado em dois outros projetos:
 
- - [Google Vision](https://developers.google.com/vision/);
- - [EzequielAdrianM's Camera2Vision](https://github.com/EzequielAdrianM/Camera2Vision).
+ - O projeto [Google Vision](https://developers.google.com/vision/);
+ - O projeto [Camera2Vision](https://github.com/EzequielAdrianM/Camera2Vision) do EzequielAdrianM.
 
 Os dois projetos foram combinados neste trabalho. A decisão de realizar tal implementação parte do fato que o projeto do Google utiliza a biblioteca [Camera](https://developer.android.com/reference/android/hardware/Camera.html) original (obsoleta a partir da API 21), enquanto o projeto do Ezequiel utiliza a biblioteca [Camera2](https://developer.android.com/reference/android/hardware/camera2/package-summary), mais recente, atualmente utilizada como padrão em projetos novos.
 
