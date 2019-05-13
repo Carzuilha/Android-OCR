@@ -13,7 +13,7 @@ Os dois projetos foram combinados neste trabalho. A decisão de realizar tal imp
 
 ## Materiais Utilizados
 
- - (**Android Studio IDE**)[https://developer.android.com/studio/];
+ - [**Android Studio IDE](https://developer.android.com/studio/);
  - Um _smartphone_/_tablet_ com Android (API 21 ou acima).
 
 ## Utilização dos Códigos do Projeto

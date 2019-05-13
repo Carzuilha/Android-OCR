@@ -13,7 +13,7 @@ These two projects were combined in this work. The decision to do this approach 
 
 ## Utilized Material
 
- - (**Android Studio IDE**)[https://developer.android.com/studio/];
+ - [**Android Studio IDE](https://developer.android.com/studio/);
  - A _smartphone_/_tablet_ on Android (API 21 or above).
 
 ## Usage of the Project Sources
