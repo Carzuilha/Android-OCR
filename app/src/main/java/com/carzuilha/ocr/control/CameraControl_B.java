@@ -1114,11 +1114,11 @@ public class CameraControl_B extends CameraControl {
         public Builder(Context _context, Detector<?> _detector) {
 
             if (_context == null) {
-                throw new IllegalArgumentException("No _context supplied.");
+                throw new IllegalArgumentException("No context supplied.");
             }
 
             if (_detector == null) {
-                throw new IllegalArgumentException("No _detector supplied.");
+                throw new IllegalArgumentException("No detector supplied.");
             }
 
             this.detector = _detector;
